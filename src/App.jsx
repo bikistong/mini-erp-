@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { db } from "./api/gsheet";
 
 const fmt = (n) => "Rp " + Number(n||0).toLocaleString("id-ID");
 const today = () => new Date().toISOString().slice(0, 10);
@@ -36,6 +37,7 @@ function Sidebar({ tab, setTab, company, isOpen, onClose, user }) {
   const toggleGroup = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
   const handleTab = (t) => { setTab(t); if (window.innerWidth < 768) onClose(); };
 
+  if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
   return (
     <>
       {isOpen && <div className="fixed inset-0 bg-black bg-opacity-40 z-40 md:hidden" onClick={onClose}/>}
@@ -70,7 +72,8 @@ function Sidebar({ tab, setTab, company, isOpen, onClose, user }) {
 
               {(expanded[g.id] || !isOpen) && g.tabs.map(t => {
                 const active = tab === t.id;
-                return (
+                if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
+  return (
                   <button key={t.id} onClick={() => handleTab(t.id)} title={t.label}
                     className={`w-full flex items-center gap-3 px-3 py-2 transition-colors relative group ${active?"bg-blue-600/90 text-white":"text-gray-400 hover:bg-gray-800/60 hover:text-gray-200"}`}>
                     {active && <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-blue-300 rounded-r"/>}
@@ -781,10 +784,12 @@ export default function App() {
   const [company,setCompany]=useState(initCompany);
   const [customers,setCustomers]=useState(initCustomers);
   const [suppliers,setSuppliers]=useState(initSuppliers);
+  const [loading,setLoading]=useState(true);
   const [csvModal,setCSVModal]=useState(null);
   const [printTarget,setPrintTarget]=useState(null);
   const [sidebarOpen,setSidebarOpen]=useState(false);
   csvCb.set=setCSVModal;
+  useEffect(()=>{async function load(){try{const[j,a,ap,inv,acc,cust,supp,comp]=await Promise.all([db.getJournals(),db.getAR(),db.getAP(),db.getInventory(),db.getAccounts(),db.getCustomers(),db.getSuppliers(),db.getCompany()]);if(j.length)setJournals(j);if(a.length)setAr(a);if(ap.length)setAp(ap);if(inv.length)setInventory(inv);if(acc.length)setAccounts(acc);if(cust.length)setCustomers(cust);if(supp.length)setSuppliers(supp);if(Object.keys(comp).length)setCompany(comp);}catch(e){console.error("Load error:",e);}finally{setLoading(false);}}load();},[]);
 
   const akunKas=accounts.filter(a=>a.subKategori==="Kas & Setara Kas");
 
@@ -806,6 +811,7 @@ export default function App() {
   const currentTabMeta=NAV_GROUPS.flatMap(g=>g.tabs).find(t=>t.id===tab);
   const currentGroup=NAV_GROUPS.find(g=>g.tabs.some(t=>t.id===tab));
 
+  if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
   return (
     <div className="h-screen bg-gray-100 font-sans flex overflow-hidden">
       {csvModal&&<CSVOutputModal data={csvModal} onClose={()=>setCSVModal(null)}/>}
