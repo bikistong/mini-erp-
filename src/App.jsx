@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { db } from "./api/gsheet";
+import Login from "./Login";
 
 const fmt = (n) => "Rp " + Number(n||0).toLocaleString("id-ID");
 const today = () => new Date().toISOString().slice(0, 10);
@@ -31,8 +32,16 @@ const NAV_GROUPS = [
   { id:"master",    label:"Pengaturan",         icon:"settings",   tabs:[{id:"Inventory",label:"Inventory",icon:"box"},{id:"Master",label:"Master Data",icon:"users"},{id:"COA",label:"Chart of Accounts",icon:"list"}] },
 ];
 
+// ─── ROLE ACCESS CONFIG
+const ROLE_ACCESS = {
+  admin:  ["Dashboard","Buku Besar","Laporan","Invoice","Piutang","Hutang","Jurnal","Inventory","Master","COA"],
+  kasir:  ["Dashboard","Piutang","Hutang","Invoice"],
+  gudang: ["Dashboard","Inventory"],
+};
+
 // ─── SIDEBAR ─────────────────────────────────────────────────
-function Sidebar({ tab, setTab, company, isOpen, onClose, user }) {
+function Sidebar({ tab, setTab, company, isOpen, onClose, user, onLogout }) {
+  const access = ROLE_ACCESS[user?.role] || [];
   const [expanded, setExpanded] = useState({ laporan:true, transaksi:true, master:false });
   const toggleGroup = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
   const handleTab = (t) => { setTab(t); if (window.innerWidth < 768) onClose(); };
@@ -69,7 +78,7 @@ function Sidebar({ tab, setTab, company, isOpen, onClose, user }) {
                 )}
               </button>
 
-              {(expanded[g.id] || !isOpen) && g.tabs.map(t => {
+              {(expanded[g.id] || !isOpen) && g.tabs.filter(t=>access.includes(t.id)).map(t => {
                 const active = tab === t.id;
                 return (
                   <button key={t.id} onClick={() => handleTab(t.id)} title={t.label}
@@ -94,11 +103,11 @@ function Sidebar({ tab, setTab, company, isOpen, onClose, user }) {
               <div className="flex items-center gap-2 px-1 py-1.5 mb-1">
                 <div className="w-7 h-7 bg-blue-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">A</div>
                 <div className="overflow-hidden">
-                  <div className="text-xs font-medium text-white truncate">Administrator</div>
-                  <div className="text-xs text-gray-500">admin</div>
+                  <div className="text-xs font-medium text-white truncate">{user?.nama||"User"}</div>
+                  <div className="text-xs text-gray-500">{user?.role||"staff"}</div>
                 </div>
               </div>
-              <button className="w-full flex items-center gap-2 px-2 py-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-800/60 rounded-lg transition-colors text-xs">
+              <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-800/60 rounded-lg transition-colors text-xs">
                 {ICONS.logout}<span>Keluar</span>
               </button>
             </>
@@ -782,6 +791,7 @@ function InvoiceModule({ar,templates,setTemplates,company,setCompany,printTarget
 export default function App() {
   const [tab,setTab]=useState("Dashboard");
   const [loading,setLoading]=useState(true);
+  const [user,setUser]=useState(null);
   const [accounts,setAccounts]=useState([]);
   const [journals,setJournals]=useState([]);
   const [ar,setAr]=useState([]);
@@ -818,12 +828,13 @@ export default function App() {
   const currentTabMeta=NAV_GROUPS.flatMap(g=>g.tabs).find(t=>t.id===tab);
   const currentGroup=NAV_GROUPS.find(g=>g.tabs.some(t=>t.id===tab));
 
+  if(!user)return <Login onLogin={setUser}/>;
   if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
   return (
     <div className="h-screen bg-gray-100 font-sans flex overflow-hidden">
       {csvModal&&<CSVOutputModal data={csvModal} onClose={()=>setCSVModal(null)}/>}
 
-      <Sidebar tab={tab} setTab={setTab} company={company} isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)}/>
+      <Sidebar tab={tab} setTab={setTab} company={company} isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} user={user} onLogout={()=>setUser(null)}/>
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <div className="bg-white border-b px-4 py-3 flex items-center gap-3 sticky top-0 z-30 flex-shrink-0">
