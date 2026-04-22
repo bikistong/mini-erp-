@@ -37,7 +37,6 @@ function Sidebar({ tab, setTab, company, isOpen, onClose, user }) {
   const toggleGroup = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
   const handleTab = (t) => { setTab(t); if (window.innerWidth < 768) onClose(); };
 
-  if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
   return (
     <>
       {isOpen && <div className="fixed inset-0 bg-black bg-opacity-40 z-40 md:hidden" onClick={onClose}/>}
@@ -72,8 +71,7 @@ function Sidebar({ tab, setTab, company, isOpen, onClose, user }) {
 
               {(expanded[g.id] || !isOpen) && g.tabs.map(t => {
                 const active = tab === t.id;
-                if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
-  return (
+                return (
                   <button key={t.id} onClick={() => handleTab(t.id)} title={t.label}
                     className={`w-full flex items-center gap-3 px-3 py-2 transition-colors relative group ${active?"bg-blue-600/90 text-white":"text-gray-400 hover:bg-gray-800/60 hover:text-gray-200"}`}>
                     {active && <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-blue-300 rounded-r"/>}
@@ -322,8 +320,8 @@ function Jurnal({journals,setJournals,accounts}){
   const totD=form.entries.filter(e=>e.posisi==="D").reduce((s,e)=>s+(Number(e.nominal)||0),0);
   const totK=form.entries.filter(e=>e.posisi==="K").reduce((s,e)=>s+(Number(e.nominal)||0),0);
   const ok=totD===totK&&totD>0;
-  const save=()=>{if(!ok||!form.keterangan)return;setJournals(j=>[...j,{...form,id:Date.now(),auto:false,entries:form.entries.map(e=>({...e,nominal:Number(e.nominal)}))}]);setForm(empty);setShow(false);};
-  const doConfirm=()=>{if(!confirm)return;if(confirm.type==="all")setJournals([]);else setJournals(js=>js.filter(j=>j.id!==confirm.id));setConfirm(null);};
+  const save=async()=>{if(!ok||!form.keterangan)return;const nj={...form,id:Date.now(),auto:false,entries:form.entries.map(e=>({...e,nominal:Number(e.nominal)}))};await db.addJournal(nj).catch(console.error);setJournals(j=>[...j,nj]);setForm(empty);setShow(false);};
+  const doConfirm=async()=>{if(!confirm)return;if(confirm.type==="all"){await db.clearJournals().catch(console.error);setJournals([]);}else{await db.deleteJournal(confirm.id).catch(console.error);setJournals(js=>js.filter(j=>j.id!==confirm.id));}setConfirm(null);};
   return(
     <div>
       {confirm&&<ConfirmDialog message={confirm.type==="all"?"Hapus semua jurnal?":"Hapus jurnal ini?"} onConfirm={doConfirm} onCancel={()=>setConfirm(null)}/>}
@@ -682,7 +680,7 @@ function MasterData({customers,setCustomers,suppliers,setSuppliers}){
   const [form,setForm]=useState(emptyC);
   const isC=view==="customer";const data=isC?customers:suppliers;const setData=isC?setCustomers:setSuppliers;
   const switchView=(v)=>{setView(v);setShowForm(false);setEditId(null);setForm(v==="customer"?emptyC:emptyS);};
-  const save=()=>{if(!form.nama)return;const p={...form,limit:Number(form.limit)||0,termin:Number(form.termin)||0};if(editId){setData(d=>d.map(x=>x.id===editId?{...p,id:editId}:x));setEditId(null);}else setData(d=>[...d,{...p,id:Date.now()}]);setForm(isC?emptyC:emptyS);setShowForm(false);};
+  const save=async()=>{if(!form.nama)return;const p={...form,limit:Number(form.limit)||0,termin:Number(form.termin)||0};if(editId){await (isC?db.updateCustomer:db.updateSupplier)(editId,{...p,id:editId}).catch(console.error);setData(d=>d.map(x=>x.id===editId?{...p,id:editId}:x));setEditId(null);}else{const nd={...p,id:Date.now()};await (isC?db.addCustomer:db.addSupplier)(nd).catch(console.error);setData(d=>[...d,nd]);}setForm(isC?emptyC:emptyS);setShowForm(false);};
   const fields=isC?[["kode","Kode"],["nama","Nama"],["kontak","Kontak"],["telp","Telp"],["email","Email"],["alamat","Alamat"],["npwp","NPWP"],["limit","Credit Limit"]]:[["kode","Kode"],["nama","Nama"],["kontak","Kontak"],["telp","Telp"],["email","Email"],["alamat","Alamat"],["npwp","NPWP"],["termin","Termin (hari)"]];
   return(
     <div>
@@ -811,7 +809,6 @@ export default function App() {
   const currentTabMeta=NAV_GROUPS.flatMap(g=>g.tabs).find(t=>t.id===tab);
   const currentGroup=NAV_GROUPS.find(g=>g.tabs.some(t=>t.id===tab));
 
-  if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
   return (
     <div className="h-screen bg-gray-100 font-sans flex overflow-hidden">
       {csvModal&&<CSVOutputModal data={csvModal} onClose={()=>setCSVModal(null)}/>}
