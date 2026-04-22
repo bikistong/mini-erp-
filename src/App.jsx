@@ -790,8 +790,6 @@ export default function App() {
 
   useEffect(()=>{async function loadAll(){try{const[j,a,ap2,inv,acc,cust,supp,comp]=await Promise.all([db.getJournals(),db.getAR(),db.getAP(),db.getInventory(),db.getAccounts(),db.getCustomers(),db.getSuppliers(),db.getCompany()]);if(j&&j.length)setJournals(j);if(a&&a.length)setAr(a);if(ap2&&ap2.length)setAp(ap2);if(inv&&inv.length)setInventory(inv);if(acc&&acc.length)setAccounts(acc);if(cust&&cust.length)setCustomers(cust);if(supp&&supp.length)setSuppliers(supp);if(comp&&Object.keys(comp).length)setCompany(comp);}catch(e){console.error("Load error:",e);}finally{setLoading(false);}}loadAll();},[]);
 
-  if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
-
   const akunKas=accounts.filter(a=>a.subKategori==="Kas & Setara Kas");
 
   const balances=useMemo(()=>{
@@ -812,6 +810,7 @@ export default function App() {
   const currentTabMeta=NAV_GROUPS.flatMap(g=>g.tabs).find(t=>t.id===tab);
   const currentGroup=NAV_GROUPS.find(g=>g.tabs.some(t=>t.id===tab));
 
+  if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
   return (
     <div className="h-screen bg-gray-100 font-sans flex overflow-hidden">
       {csvModal&&<CSVOutputModal data={csvModal} onClose={()=>setCSVModal(null)}/>}
