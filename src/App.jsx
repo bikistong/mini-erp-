@@ -774,15 +774,15 @@ function InvoiceModule({ar,templates,setTemplates,company,setCompany,printTarget
 export default function App() {
   const [tab,setTab]=useState("Dashboard");
   const [loading,setLoading]=useState(true);
-  const [accounts,setAccounts]=useState(initAccounts);
-  const [journals,setJournals]=useState(initJournals);
-  const [ar,setAr]=useState(initAR);
-  const [ap,setAp]=useState(initAP);
-  const [inventory,setInventory]=useState(initInventory);
+  const [accounts,setAccounts]=useState([]);
+  const [journals,setJournals]=useState([]);
+  const [ar,setAr]=useState([]);
+  const [ap,setAp]=useState([]);
+  const [inventory,setInventory]=useState([]);
   const [templates,setTemplates]=useState(initTemplates);
-  const [company,setCompany]=useState(initCompany);
-  const [customers,setCustomers]=useState(initCustomers);
-  const [suppliers,setSuppliers]=useState(initSuppliers);
+  const [company,setCompany]=useState({nama:"",alamat:"",telp:"",email:"",npwp:""});
+  const [customers,setCustomers]=useState([]);
+  const [suppliers,setSuppliers]=useState([]);
   const [csvModal,setCSVModal]=useState(null);
   const [printTarget,setPrintTarget]=useState(null);
   const [sidebarOpen,setSidebarOpen]=useState(false);
