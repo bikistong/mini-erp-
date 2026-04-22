@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_GSHEET_API_URL;
+const API_URL = "https://script.google.com/macros/s/AKfycbzllB5xxxk_OmL-jQr0lqKMZBDfEPEGhmffTUs_7y9Bd0rE6iC65PpTCP5cR7ymqrBnrw/exec";
 
 async function gGet(params) {
   const url = new URL(API_URL);
@@ -28,6 +28,7 @@ export const db = {
   getCustomers:   () => gGet({ action:"getAll", sheet:"customers" }),
   getSuppliers:   () => gGet({ action:"getAll", sheet:"suppliers" }),
   getCompany:     () => gGet({ action:"getCompany" }),
+  getUsers:       () => gGet({ action:"getUsers" }),
 
   addJournal:     (data) => gPost({ action:"append", sheet:"journals", data }),
   addAR:          (data) => gPost({ action:"append", sheet:"ar", data }),
