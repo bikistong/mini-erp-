@@ -320,8 +320,8 @@ function Jurnal({journals,setJournals,accounts}){
   const totD=form.entries.filter(e=>e.posisi==="D").reduce((s,e)=>s+(Number(e.nominal)||0),0);
   const totK=form.entries.filter(e=>e.posisi==="K").reduce((s,e)=>s+(Number(e.nominal)||0),0);
   const ok=totD===totK&&totD>0;
-  const save=()=>{if(!ok||!form.keterangan)return;setJournals(j=>[...j,{...form,id:Date.now(),auto:false,entries:form.entries.map(e=>({...e,nominal:Number(e.nominal)}))}]);setForm(empty);setShow(false);};
-  const doConfirm=()=>{if(!confirm)return;if(confirm.type==="all")setJournals([]);else setJournals(js=>js.filter(j=>j.id!==confirm.id));setConfirm(null);};
+  const save=async()=>{if(!ok||!form.keterangan)return;const nj={...form,id:Date.now(),auto:false,entries:form.entries.map(e=>({...e,nominal:Number(e.nominal)}))};await db.addJournal(nj).catch(console.error);setJournals(j=>[...j,nj]);setForm(empty);setShow(false);};
+  const doConfirm=async()=>{if(!confirm)return;if(confirm.type==="all"){await db.clearJournals().catch(console.error);setJournals([]);}else{await db.deleteJournal(confirm.id).catch(console.error);setJournals(js=>js.filter(j=>j.id!==confirm.id));}setConfirm(null);};
   return(
     <div>
       {confirm&&<ConfirmDialog message={confirm.type==="all"?"Hapus semua jurnal?":"Hapus jurnal ini?"} onConfirm={doConfirm} onCancel={()=>setConfirm(null)}/>}
@@ -402,8 +402,8 @@ function Piutang({ar,setAr,setJournals,inventory,customers,akunKas,onPrint}){
   const subtotal=items.reduce((s,it)=>s+(it.subtotal||0),0);
   const diskonNom=subtotal*(diskon/100);const dpp=subtotal-diskonNom;const ppnNom=ppnAktif?dpp*(ppnPct/100):0;const total=dpp+ppnNom;
   const addJ=(ket,tgl,entries)=>setJournals(js=>[...js,{id:Date.now(),tanggal:tgl,keterangan:ket,auto:true,entries}]);
-  const save=()=>{if(!form.pelanggan||!total)return;setAr(a=>[...a,{...form,id:Date.now(),jumlah:total,dibayar:0,status:"Belum",items:items.map(it=>({...it,qty:Number(it.qty),harga:Number(it.harga)})),diskon,ppnPct:ppnAktif?ppnPct:0,ppnNominal:ppnNom,dpp,subtotalSebelumDiskon:subtotal}]);addJ(`Penjualan [${form.invoice}] ${form.pelanggan}`,form.tanggal,[{akun:PIUTANG,posisi:"D",nominal:total},{akun:PENJUALAN,posisi:"K",nominal:dpp},...(ppnAktif?[{akun:"2-103",posisi:"K",nominal:ppnNom}]:[])]);db.addAR({...form,id:Date.now(),dibayar:0,status:"Belum",items:items.map(i=>({...i,qty:Number(i.qty),harga:Number(i.harga)}))}).catch(console.error);setShow(false);};
-  const handleBayar=(nominal,akunDebit)=>{if(!bayarItem)return;setAr(a=>a.map(r=>{if(r.id!==bayarItem.id)return r;const nd=Math.min(r.dibayar+nominal,r.jumlah);return{...r,dibayar:nd,status:nd>=r.jumlah?"Lunas":"Sebagian"};}));addJ(`Terima Pembayaran [${bayarItem.invoice}] ${bayarItem.pelanggan}`,today(),[{akun:akunDebit,posisi:"D",nominal},{akun:PIUTANG,posisi:"K",nominal}]);};
+  const save=async()=>{if(!form.pelanggan||!total)return;const nar={...form,id:Date.now(),jumlah:total,dibayar:0,status:"Belum",items:items.map(it=>({...it,qty:Number(it.qty),harga:Number(it.harga)})),diskon,ppnPct:ppnAktif?ppnPct:0,ppnNominal:ppnNom,dpp,subtotalSebelumDiskon:subtotal};await db.addAR(nar).catch(console.error);setAr(a=>[...a,nar]);addJ(`Penjualan [${form.invoice}] ${form.pelanggan}`,form.tanggal,[{akun:PIUTANG,posisi:"D",nominal:total},{akun:PENJUALAN,posisi:"K",nominal:dpp},...(ppnAktif?[{akun:"2-103",posisi:"K",nominal:ppnNom}]:[])]);setShow(false);};
+  const handleBayar=async(nominal,akunDebit)=>{if(!bayarItem)return;const bid=bayarItem.id;setAr(a=>a.map(r=>{if(r.id!==bid)return r;const nd=Math.min(r.dibayar+nominal,r.jumlah);const upd={...r,dibayar:nd,status:nd>=r.jumlah?"Lunas":"Sebagian"};db.updateAR(bid,upd).catch(console.error);return upd;}));addJ(`Terima Pembayaran [${bayarItem.invoice}] ${bayarItem.pelanggan}`,today(),[{akun:akunDebit,posisi:"D",nominal},{akun:PIUTANG,posisi:"K",nominal}]);};
   return(
     <div>
       {bayarItem&&<BayarModal item={bayarItem} tipe="piutang" akunKas={akunKas} onSave={handleBayar} onClose={()=>setBayarItem(null)}/>}
@@ -485,8 +485,8 @@ function Hutang({ap,setAp,setJournals,suppliers,akunKas}){
   const diskonNom=subtotal*(diskon/100);const dpp=subtotal-diskonNom;const ppnNom=ppnAktif?dpp*(ppnPct/100):0;const total=dpp+ppnNom;
   const initForm=()=>{setForm({tanggal:today(),supplier:"",invoice:genPONo(ap),jatuhTempo:""});setItems([{nama:"",qty:1,harga:"",diskon:0,subtotal:0}]);setDiskon(0);setPpnPct(11);setPpnAktif(false);setShow(true);};
   const addJ=(ket,tgl,entries)=>setJournals(js=>[...js,{id:Date.now(),tanggal:tgl,keterangan:ket,auto:true,entries}]);
-  const save=()=>{if(!form.supplier||!total)return;setAp(a=>[...a,{...form,id:Date.now(),jumlah:total,dibayar:0,status:"Belum",items:items.map(it=>({...it,qty:Number(it.qty),harga:Number(it.harga)})),diskon,ppnPct:ppnAktif?ppnPct:0,ppnNominal:ppnNom,dpp}]);addJ(`Pembelian [${form.invoice}] ${form.supplier}`,form.tanggal,[{akun:PERSBB,posisi:"D",nominal:dpp},{akun:HUTANG_U,posisi:"K",nominal:total},...(ppnAktif?[{akun:"1-106",posisi:"D",nominal:ppnNom}]:[])]);db.addAP({...form,id:Date.now(),dibayar:0,status:"Belum"}).catch(console.error);setShow(false);};
-  const handleBayar=(nominal,akunKredit)=>{if(!bayarItem)return;setAp(a=>a.map(r=>{if(r.id!==bayarItem.id)return r;const nd=Math.min(r.dibayar+nominal,r.jumlah);return{...r,dibayar:nd,status:nd>=r.jumlah?"Lunas":"Sebagian"};}));addJ(`Bayar Hutang [${bayarItem.invoice}] ${bayarItem.supplier}`,today(),[{akun:HUTANG_U,posisi:"D",nominal},{akun:akunKredit,posisi:"K",nominal}]);};
+  const save=async()=>{if(!form.supplier||!total)return;const nap={...form,id:Date.now(),jumlah:total,dibayar:0,status:"Belum",items:items.map(it=>({...it,qty:Number(it.qty),harga:Number(it.harga)})),diskon,ppnPct:ppnAktif?ppnPct:0,ppnNominal:ppnNom,dpp};await db.addAP(nap).catch(console.error);setAp(a=>[...a,nap]);addJ(`Pembelian [${form.invoice}] ${form.supplier}`,form.tanggal,[{akun:PERSBB,posisi:"D",nominal:dpp},{akun:HUTANG_U,posisi:"K",nominal:total},...(ppnAktif?[{akun:"1-106",posisi:"D",nominal:ppnNom}]:[])]);setShow(false);};
+  const handleBayar=async(nominal,akunKredit)=>{if(!bayarItem)return;const bid=bayarItem.id;setAp(a=>a.map(r=>{if(r.id!==bid)return r;const nd=Math.min(r.dibayar+nominal,r.jumlah);const upd={...r,dibayar:nd,status:nd>=r.jumlah?"Lunas":"Sebagian"};db.updateAP(bid,upd).catch(console.error);return upd;}));addJ(`Bayar Hutang [${bayarItem.invoice}] ${bayarItem.supplier}`,today(),[{akun:HUTANG_U,posisi:"D",nominal},{akun:akunKredit,posisi:"K",nominal}]);};
   return(
     <div>
       {bayarItem&&<BayarModal item={bayarItem} tipe="hutang" akunKas={akunKas} onSave={handleBayar} onClose={()=>setBayarItem(null)}/>}
@@ -558,8 +558,8 @@ function Inventory({inventory,setInventory,setJournals}){
   const [form,setForm]=useState({kode:"",nama:"",kategori:"Bahan Baku",satuan:"Unit",stok:"",hargaBeli:"",hargaJual:"",minimum:""});
   const [qty,setQty]=useState("");const [tipe,setTipe]=useState("masuk");
   const akunPers=(kat)=>kat==="Barang Jadi"?PERSBJ:PERSBB;
-  const save=()=>{if(!form.nama)return;const stok=Number(form.stok),hargaBeli=Number(form.hargaBeli);setInventory(i=>[...i,{...form,id:Date.now(),stok,hargaBeli,hargaJual:Number(form.hargaJual),minimum:Number(form.minimum)}]);if(stok>0&&hargaBeli>0)setJournals(js=>[...js,{id:Date.now()+1,tanggal:today(),keterangan:`Stok Awal - ${form.nama}`,auto:true,entries:[{akun:akunPers(form.kategori),posisi:"D",nominal:stok*hargaBeli},{akun:MODAL,posisi:"K",nominal:stok*hargaBeli}]}]);setForm({kode:"",nama:"",kategori:"Bahan Baku",satuan:"Unit",stok:"",hargaBeli:"",hargaJual:"",minimum:""});setShow(false);};
-  const saveAdj=()=>{const q=Number(qty);if(!q||!adj)return;const nilai=q*adj.hargaBeli,akun=akunPers(adj.kategori);setInventory(i=>i.map(it=>it.id!==adj.id?it:{...it,stok:tipe==="masuk"?it.stok+q:Math.max(0,it.stok-q)}));setJournals(js=>[...js,{id:Date.now(),tanggal:today(),keterangan:`Penyesuaian ${tipe==="masuk"?"Masuk":"Keluar"} - ${adj.nama}`,auto:true,entries:tipe==="masuk"?[{akun,posisi:"D",nominal:nilai},{akun:MODAL,posisi:"K",nominal:nilai}]:[{akun:HPP,posisi:"D",nominal:nilai},{akun,posisi:"K",nominal:nilai}]}]);setAdj(null);setQty("");};
+  const save=async()=>{if(!form.nama)return;const stok=Number(form.stok),hargaBeli=Number(form.hargaBeli);const ni={...form,id:Date.now(),stok,hargaBeli,hargaJual:Number(form.hargaJual),minimum:Number(form.minimum)};await db.addInventory(ni).catch(console.error);setInventory(i=>[...i,ni]);if(stok>0&&hargaBeli>0)setJournals(js=>[...js,{id:Date.now()+1,tanggal:today(),keterangan:`Stok Awal - ${form.nama}`,auto:true,entries:[{akun:akunPers(form.kategori),posisi:"D",nominal:stok*hargaBeli},{akun:MODAL,posisi:"K",nominal:stok*hargaBeli}]}]);setForm({kode:"",nama:"",kategori:"Bahan Baku",satuan:"Unit",stok:"",hargaBeli:"",hargaJual:"",minimum:""});setShow(false);};
+  const saveAdj=async()=>{const q=Number(qty);if(!q||!adj)return;const nilai=q*adj.hargaBeli,akun=akunPers(adj.kategori);setInventory(i=>i.map(it=>{if(it.id!==adj.id)return it;const upd={...it,stok:tipe==="masuk"?it.stok+q:Math.max(0,it.stok-q)};db.updateInventory(it.id,upd).catch(console.error);return upd;}));setJournals(js=>[...js,{id:Date.now(),tanggal:today(),keterangan:`Penyesuaian ${tipe==="masuk"?"Masuk":"Keluar"} - ${adj.nama}`,auto:true,entries:tipe==="masuk"?[{akun,posisi:"D",nominal:nilai},{akun:MODAL,posisi:"K",nominal:nilai}]:[{akun:HPP,posisi:"D",nominal:nilai},{akun,posisi:"K",nominal:nilai}]}]);setAdj(null);setQty("");};
   return(
     <div>
       {showCSVModal&&<CSVImportModal moduleName="Inventory" requiredHeaders={["kode","nama","kategori","satuan","stok","hargaBeli","hargaJual","minimum"]} templateRows={[{kode:"BB-001",nama:"Baja Plat",kategori:"Bahan Baku",satuan:"Lembar",stok:"100",hargaBeli:"350000",hargaJual:"0",minimum:"20"}]} onImport={(rows,mode)=>{const d=rows.map((r,i)=>({id:Date.now()+i,kode:r.kode,nama:r.nama,kategori:r.kategori,satuan:r.satuan,stok:Number(r.stok)||0,hargaBeli:Number(r.hargaBeli)||0,hargaJual:Number(r.hargaJual)||0,minimum:Number(r.minimum)||0}));setInventory(i=>mode==="replace"?d:[...i,...d]);}} onClose={()=>setShowCSVModal(false)}/>}
@@ -680,7 +680,7 @@ function MasterData({customers,setCustomers,suppliers,setSuppliers}){
   const [form,setForm]=useState(emptyC);
   const isC=view==="customer";const data=isC?customers:suppliers;const setData=isC?setCustomers:setSuppliers;
   const switchView=(v)=>{setView(v);setShowForm(false);setEditId(null);setForm(v==="customer"?emptyC:emptyS);};
-  const save=()=>{if(!form.nama)return;const p={...form,limit:Number(form.limit)||0,termin:Number(form.termin)||0};if(editId){setData(d=>d.map(x=>x.id===editId?{...p,id:editId}:x));setEditId(null);}else setData(d=>[...d,{...p,id:Date.now()}]);setForm(isC?emptyC:emptyS);setShowForm(false);};
+  const save=async()=>{if(!form.nama)return;const p={...form,limit:Number(form.limit)||0,termin:Number(form.termin)||0};if(editId){const upd={...p,id:editId};await (isC?db.updateCustomer:db.updateSupplier)(editId,upd).catch(console.error);setData(d=>d.map(x=>x.id===editId?upd:x));setEditId(null);}else{const nd={...p,id:Date.now()};await (isC?db.addCustomer:db.addSupplier)(nd).catch(console.error);setData(d=>[...d,nd]);}setForm(isC?emptyC:emptyS);setShowForm(false);};
   const fields=isC?[["kode","Kode"],["nama","Nama"],["kontak","Kontak"],["telp","Telp"],["email","Email"],["alamat","Alamat"],["npwp","NPWP"],["limit","Credit Limit"]]:[["kode","Kode"],["nama","Nama"],["kontak","Kontak"],["telp","Telp"],["email","Email"],["alamat","Alamat"],["npwp","NPWP"],["termin","Termin (hari)"]];
   return(
     <div>
@@ -773,6 +773,7 @@ function InvoiceModule({ar,templates,setTemplates,company,setCompany,printTarget
 // ─── APP ─────────────────────────────────────────────────────
 export default function App() {
   const [tab,setTab]=useState("Dashboard");
+  const [loading,setLoading]=useState(true);
   const [accounts,setAccounts]=useState(initAccounts);
   const [journals,setJournals]=useState(initJournals);
   const [ar,setAr]=useState(initAR);
@@ -786,6 +787,10 @@ export default function App() {
   const [printTarget,setPrintTarget]=useState(null);
   const [sidebarOpen,setSidebarOpen]=useState(false);
   csvCb.set=setCSVModal;
+
+  useEffect(()=>{async function loadAll(){try{const[j,a,ap2,inv,acc,cust,supp,comp]=await Promise.all([db.getJournals(),db.getAR(),db.getAP(),db.getInventory(),db.getAccounts(),db.getCustomers(),db.getSuppliers(),db.getCompany()]);if(j&&j.length)setJournals(j);if(a&&a.length)setAr(a);if(ap2&&ap2.length)setAp(ap2);if(inv&&inv.length)setInventory(inv);if(acc&&acc.length)setAccounts(acc);if(cust&&cust.length)setCustomers(cust);if(supp&&supp.length)setSuppliers(supp);if(comp&&Object.keys(comp).length)setCompany(comp);}catch(e){console.error("Load error:",e);}finally{setLoading(false);}}loadAll();},[]);
+
+  if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
 
   const akunKas=accounts.filter(a=>a.subKategori==="Kas & Setara Kas");
 
