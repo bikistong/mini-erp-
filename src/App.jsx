@@ -558,6 +558,12 @@ function Inventory({inventory,setInventory,setJournals}){
   const [form,setForm]=useState({kode:"",nama:"",kategori:"Bahan Baku",satuan:"Unit",stok:"",hargaBeli:"",hargaJual:"",minimum:""});
   const [qty,setQty]=useState("");const [tipe,setTipe]=useState("masuk");
   const akunPers=(kat)=>kat==="Barang Jadi"?PERSBJ:PERSBB;
+  const genSKU=(kat)=>{
+    const prefix=kat==="Bahan Baku"?"BB":kat==="Barang Jadi"?"BJ":"BP";
+    const nums=inventory.filter(i=>i.kategori===kat).map(i=>parseInt((i.kode||"").replace(/\D/g,""))).filter(Boolean);
+    const next=nums.length?Math.max(...nums)+1:1;
+    return prefix+"-"+String(next).padStart(3,"0");
+  };
   const save=async()=>{if(!form.nama)return;const stok=Number(form.stok),hargaBeli=Number(form.hargaBeli);const ni={...form,id:Date.now(),stok,hargaBeli,hargaJual:Number(form.hargaJual),minimum:Number(form.minimum)};await db.addInventory(ni).catch(console.error);setInventory(i=>[...i,ni]);if(stok>0&&hargaBeli>0)setJournals(js=>[...js,{id:Date.now()+1,tanggal:today(),keterangan:`Stok Awal - ${form.nama}`,auto:true,entries:[{akun:akunPers(form.kategori),posisi:"D",nominal:stok*hargaBeli},{akun:MODAL,posisi:"K",nominal:stok*hargaBeli}]}]);setForm({kode:"",nama:"",kategori:"Bahan Baku",satuan:"Unit",stok:"",hargaBeli:"",hargaJual:"",minimum:""});setShow(false);};
   const saveAdj=async()=>{const q=Number(qty);if(!q||!adj)return;const nilai=q*adj.hargaBeli,akun=akunPers(adj.kategori);setInventory(i=>i.map(it=>{if(it.id!==adj.id)return it;const upd={...it,stok:tipe==="masuk"?it.stok+q:Math.max(0,it.stok-q)};db.updateInventory(it.id,upd).catch(console.error);return upd;}));setJournals(js=>[...js,{id:Date.now(),tanggal:today(),keterangan:`Penyesuaian ${tipe==="masuk"?"Masuk":"Keluar"} - ${adj.nama}`,auto:true,entries:tipe==="masuk"?[{akun,posisi:"D",nominal:nilai},{akun:MODAL,posisi:"K",nominal:nilai}]:[{akun:HPP,posisi:"D",nominal:nilai},{akun,posisi:"K",nominal:nilai}]}]);setAdj(null);setQty("");};
   return(
@@ -574,7 +580,7 @@ function Inventory({inventory,setInventory,setJournals}){
       {show&&(
         <div className="bg-white border rounded-xl p-4 mb-5 shadow-sm grid grid-cols-2 gap-3">
           {[["kode","Kode","text"],["nama","Nama Item","text"],["satuan","Satuan","text"],["stok","Stok Awal","number"],["hargaBeli","Harga Beli","number"],["hargaJual","Harga Jual","number"],["minimum","Stok Min","number"]].map(([k,l,t])=>(<div key={k}><label className="text-xs text-gray-500">{l}</label><input type={t} className="w-full border rounded p-2 text-sm mt-1" value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))}/></div>))}
-          <div><label className="text-xs text-gray-500">Kategori</label><select className="w-full border rounded p-2 text-sm mt-1" value={form.kategori} onChange={e=>setForm(f=>({...f,kategori:e.target.value}))}><option>Bahan Baku</option><option>Barang Jadi</option><option>Spare Part</option><option>WIP</option></select></div>
+          <div><label className="text-xs text-gray-500">Kategori</label><select className="w-full border rounded p-2 text-sm mt-1" value={form.kategori} onChange={e=>{const k=e.target.value;setForm(f=>({...f,kategori:k,kode:genSKU(k)}))}}><option>Bahan Baku</option><option>Barang Jadi</option><option>Spare Part</option><option>WIP</option></select></div>
           <div className="col-span-2 flex gap-2"><button onClick={save} className="bg-blue-700 text-white px-4 py-2 rounded text-sm">Simpan</button><button onClick={()=>setShow(false)} className="text-gray-500 px-3 py-2 text-sm border rounded">Batal</button></div>
         </div>
       )}
