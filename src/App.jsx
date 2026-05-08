@@ -1,873 +1,1068 @@
-import { useState, useMemo, useRef, useEffect } from "react";
-import { db } from "./api/gsheet";
-import Login from "./Login";
+import { useState, useRef } from "react";
 
-const fmt = (n) => "Rp " + Number(n||0).toLocaleString("id-ID");
-const today = () => new Date().toISOString().slice(0, 10);
-const fmtDate = (d) => d ? String(d).slice(0, 10) : "-";
-
-// ─── SVG ICONS ───────────────────────────────────────────────
-const ICONS = {
-  home:      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
-  book:      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>,
-  barchart:  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></svg>,
-  printer:   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>,
-  card:      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>,
-  filetext:  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
-  clipboard: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>,
-  box:       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>,
-  users:     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>,
-  list:      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>,
-  trendingup:<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
-  layers:    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>,
-  settings:  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
-  logout:    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
-  refresh:   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>,
-};
-
-// ─── NAVIGATION CONFIG ───────────────────────────────────────
-const NAV_GROUPS = [
-  { id:"laporan",   label:"Laporan",           icon:"trendingup", tabs:[{id:"Dashboard",label:"Dashboard",icon:"home"},{id:"Buku Besar",label:"Buku Besar",icon:"book"},{id:"Laporan",label:"Laporan",icon:"barchart"},{id:"Invoice",label:"Invoice",icon:"printer"}] },
-  { id:"transaksi", label:"Transaksi",          icon:"layers",     tabs:[{id:"Piutang",label:"Piutang",icon:"card"},{id:"Hutang",label:"Hutang",icon:"filetext"},{id:"Jurnal",label:"Jurnal",icon:"clipboard"}] },
-  { id:"master",    label:"Pengaturan",         icon:"settings",   tabs:[{id:"Inventory",label:"Inventory",icon:"box"},{id:"Master",label:"Master Data",icon:"users"},{id:"COA",label:"Chart of Accounts",icon:"list"}] },
+const initBB = [
+  { id:1, kode:"BB-001", nama:"Baja Plat 2mm",     satuan:"Lembar", stok:200, hargaBeli:350000 },
+  { id:2, kode:"BB-002", nama:"Besi Hollow 40x40",  satuan:"Batang", stok:150, hargaBeli:85000  },
+  { id:3, kode:"BB-003", nama:"Cat Primer 4kg",      satuan:"Kaleng", stok:80,  hargaBeli:95000  },
+  { id:4, kode:"BB-004", nama:"Kawat Las 2.5mm",     satuan:"Roll",   stok:60,  hargaBeli:185000 },
+  { id:5, kode:"BB-005", nama:"Mur Baut Set",        satuan:"Set",    stok:300, hargaBeli:25000  },
 ];
 
-// ─── ROLE ACCESS CONFIG
-const ROLE_ACCESS = {
-  admin:  ["Dashboard","Buku Besar","Laporan","Invoice","Piutang","Hutang","Jurnal","Inventory","Master","COA"],
-  kasir:  ["Dashboard","Piutang","Hutang","Invoice"],
-  gudang: ["Dashboard","Inventory"],
-};
-
-// ─── SIDEBAR ─────────────────────────────────────────────────
-function Sidebar({ tab, setTab, company, isOpen, onClose, user, onLogout }) {
-  const access = ROLE_ACCESS[user?.role] || [];
-  const [expanded, setExpanded] = useState({ laporan:true, transaksi:true, master:false });
-  const toggleGroup = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
-  const handleTab = (t) => { setTab(t); if (window.innerWidth < 768) onClose(); };
-
-  return (
-    <>
-      {isOpen && <div className="fixed inset-0 bg-black bg-opacity-40 z-40 md:hidden" onClick={onClose}/>}
-      <aside className={`sticky top-0 h-screen bg-gray-900 text-white z-50 flex flex-col transition-all duration-300 flex-shrink-0 ${isOpen?"w-56":"w-0 md:w-14"} overflow-hidden`}>
-
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-3 py-4 border-b border-gray-700/60 min-h-[56px]">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0 font-bold text-sm shadow">E</div>
-          {isOpen && (
-            <div className="overflow-hidden whitespace-nowrap">
-              <div className="font-bold text-sm leading-tight text-white">{company.nama}</div>
-              <div className="text-gray-500 text-xs">Mini ERP v9</div>
-            </div>
-          )}
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-2 space-y-0.5 scrollbar-none" style={{scrollbarWidth:"none",msOverflowStyle:"none"}}>
-          {NAV_GROUPS.map(g => (
-            <div key={g.id}>
-              <button onClick={() => { toggleGroup(g.id); handleTab(g.tabs[0].id); }} title={g.label}
-                className="w-full flex items-center gap-3 px-3 py-2 text-gray-500 hover:text-gray-300 hover:bg-gray-800/60 transition-colors group relative">
-                <span className="flex-shrink-0 w-8 flex justify-center">{ICONS[g.icon]}</span>
-                {isOpen && <>
-                  <span className="text-[11px] font-semibold uppercase tracking-widest flex-1 text-left">{g.label}</span>
-                  <span className="text-gray-600 text-xs">{expanded[g.id]?"▾":"▸"}</span>
-                </>}
-                {!isOpen && (
-                  <div className="absolute left-14 bg-gray-800 border border-gray-700 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 hidden md:block shadow-lg">{g.label}</div>
-                )}
-              </button>
-
-              {(expanded[g.id] || !isOpen) && g.tabs.filter(t=>access.includes(t.id)).map(t => {
-                const active = tab === t.id;
-                return (
-                  <button key={t.id} onClick={() => handleTab(t.id)} title={t.label}
-                    className={`w-full flex items-center gap-3 px-3 py-2 transition-colors relative group ${active?"bg-blue-600/90 text-white":"text-gray-400 hover:bg-gray-800/60 hover:text-gray-200"}`}>
-                    {active && <div className="absolute left-0 top-1 bottom-1 w-0.5 bg-blue-300 rounded-r"/>}
-                    <span className={`flex-shrink-0 w-8 flex justify-center ${isOpen?"ml-1":""}`}>{ICONS[t.icon]}</span>
-                    {isOpen && <span className="text-sm flex-1 text-left whitespace-nowrap">{t.label}</span>}
-                    {!isOpen && (
-                      <div className="absolute left-14 bg-gray-800 border border-gray-700 text-white text-xs px-2.5 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none z-50 hidden md:block shadow-lg">{t.label}</div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-
-        {/* User + Logout */}
-        <div className="border-t border-gray-700/60 p-2">
-          {isOpen ? (
-            <>
-              <div className="flex items-center gap-2 px-1 py-1.5 mb-1">
-                <div className="w-7 h-7 bg-blue-700 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0">A</div>
-                <div className="overflow-hidden">
-                  <div className="text-xs font-medium text-white truncate">{user?.nama||"User"}</div>
-                  <div className="text-xs text-gray-500">{user?.role||"staff"}</div>
-                </div>
-              </div>
-              <button onClick={onLogout} className="w-full flex items-center gap-2 px-2 py-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-800/60 rounded-lg transition-colors text-xs">
-                {ICONS.logout}<span>Keluar</span>
-              </button>
-            </>
-          ) : (
-            <div className="flex flex-col items-center gap-2 py-1">
-              <div className="w-7 h-7 bg-blue-700 rounded-full flex items-center justify-center text-xs font-bold">A</div>
-              <button title="Keluar" className="text-gray-500 hover:text-red-400 transition-colors p-1">{ICONS.logout}</button>
-            </div>
-          )}
-        </div>
-      </aside>
-    </>
-  );
-}
-
-const KAS="1-101", BCA="1-102", MANDIRI="1-103", BNI="1-104";
-const PIUTANG="1-105", PERSBB="1-201", PERSBJ="1-202", ASETTETAP="1-301";
-const HUTANG_U="2-101", HUTANG_B="2-102", MODAL="3-101";
-const PENJUALAN="4-101", HPP="5-101", GAJI="5-102", UTILITAS="5-103", BAHAN_BAKU="5-104";
-
-const genInvNo = (ar) => { const n=ar.map(r=>parseInt((r.invoice||"").replace(/\D/g,""))).filter(Boolean); return `INV-${String(n.length?Math.max(...n)+1:1).padStart(3,"0")}`; };
-const genPONo  = (ap) => { const n=ap.map(r=>parseInt((r.invoice||"").replace(/\D/g,""))).filter(Boolean); return `PO-${String(n.length?Math.max(...n)+1:1).padStart(4,"0")}`; };
-
-const initAccounts = [
-  {kode:KAS,     nama:"Kas Tunai",            kategori:"Aset",       subKategori:"Kas & Setara Kas"},
-  {kode:BCA,     nama:"Bank BCA",              kategori:"Aset",       subKategori:"Kas & Setara Kas"},
-  {kode:MANDIRI, nama:"Bank Mandiri",           kategori:"Aset",       subKategori:"Kas & Setara Kas"},
-  {kode:BNI,     nama:"Bank BNI",              kategori:"Aset",       subKategori:"Kas & Setara Kas"},
-  {kode:PIUTANG, nama:"Piutang Usaha",          kategori:"Aset",       subKategori:"Piutang"},
-  {kode:PERSBB,  nama:"Persediaan Bahan Baku",  kategori:"Aset",       subKategori:"Persediaan"},
-  {kode:PERSBJ,  nama:"Persediaan Barang Jadi", kategori:"Aset",       subKategori:"Persediaan"},
-  {kode:ASETTETAP,nama:"Mesin & Peralatan",     kategori:"Aset",       subKategori:"Aset Tetap"},
-  {kode:HUTANG_U,nama:"Hutang Usaha",           kategori:"Kewajiban",  subKategori:"Hutang Jangka Pendek"},
-  {kode:HUTANG_B,nama:"Hutang Bank",            kategori:"Kewajiban",  subKategori:"Hutang Jangka Panjang"},
-  {kode:MODAL,   nama:"Modal",                  kategori:"Ekuitas",    subKategori:"Modal"},
-  {kode:PENJUALAN,nama:"Pendapatan Penjualan",  kategori:"Pendapatan", subKategori:"Pendapatan Usaha"},
-  {kode:HPP,     nama:"HPP",                    kategori:"Beban",      subKategori:"Beban Pokok"},
-  {kode:GAJI,    nama:"Beban Gaji",             kategori:"Beban",      subKategori:"Beban Operasional"},
-  {kode:UTILITAS,nama:"Beban Utilitas",          kategori:"Beban",      subKategori:"Beban Operasional"},
-  {kode:BAHAN_BAKU,nama:"Beban Bahan Baku",     kategori:"Beban",      subKategori:"Beban Pokok"},
+const initProduk = [
+  { id:1, kode:"BJ-001", nama:"Komponen Mesin A", satuan:"Unit", hargaJual:1200000, stok:12,
+    bom:[{bbId:1,qty:2},{bbId:2,qty:1},{bbId:4,qty:0.5}] },
+  { id:2, kode:"BJ-002", nama:"Komponen Mesin B", satuan:"Unit", hargaJual:2000000, stok:5,
+    bom:[{bbId:1,qty:3},{bbId:2,qty:2},{bbId:3,qty:1},{bbId:5,qty:2}] },
+  { id:3, kode:"BJ-003", nama:"Rangka Produk C",  satuan:"Unit", hargaJual:750000,  stok:20,
+    bom:[{bbId:2,qty:3},{bbId:5,qty:4}] },
 ];
 
-const initJournals = [
-  {id:1,tanggal:"2025-01-05",keterangan:"Setoran Modal Awal",        auto:false,entries:[{akun:BCA,    posisi:"D",nominal:500000000},{akun:MODAL,   posisi:"K",nominal:500000000}]},
-  {id:2,tanggal:"2025-01-10",keterangan:"Pembelian [PO-0001]",       auto:true, entries:[{akun:PERSBB, posisi:"D",nominal:80000000}, {akun:HUTANG_U,posisi:"K",nominal:80000000}]},
-  {id:3,tanggal:"2025-01-15",keterangan:"Penjualan [INV-001]",       auto:true, entries:[{akun:PIUTANG,posisi:"D",nominal:150000000},{akun:PENJUALAN,posisi:"K",nominal:150000000}]},
-  {id:4,tanggal:"2025-01-20",keterangan:"Beban Gaji Januari",        auto:false,entries:[{akun:GAJI,   posisi:"D",nominal:25000000}, {akun:BCA,     posisi:"K",nominal:25000000}]},
-  {id:5,tanggal:"2025-01-22",keterangan:"Terima Pembayaran [INV-001]",auto:true,entries:[{akun:BCA,    posisi:"D",nominal:50000000}, {akun:PIUTANG, posisi:"K",nominal:50000000}]},
-  {id:6,tanggal:"2025-01-22",keterangan:"Bayar Hutang [PO-0001]",    auto:true, entries:[{akun:HUTANG_U,posisi:"D",nominal:30000000},{akun:BCA,     posisi:"K",nominal:30000000}]},
-];
-
-const initAR = [
-  {id:1,tanggal:"2025-01-15",pelanggan:"PT Maju Jaya",invoice:"INV-001",jumlah:150000000,dibayar:50000000,jatuhTempo:"2025-02-15",status:"Sebagian",items:[{nama:"Komponen Mesin A",qty:100,harga:1200000,subtotal:120000000},{nama:"Komponen Mesin B",qty:15,harga:2000000,subtotal:30000000}],catatan:""},
-  {id:2,tanggal:"2025-01-20",pelanggan:"CV Sejahtera",invoice:"INV-002",jumlah:75000000,dibayar:0,jatuhTempo:"2025-02-20",status:"Belum",items:[{nama:"Baja Plat 2mm",qty:150,harga:500000,subtotal:75000000}],catatan:""},
-];
-
-const initAP = [
-  {id:1,tanggal:"2025-01-10",supplier:"PT Bahan Prima",invoice:"PO-0001",jumlah:80000000,dibayar:30000000,jatuhTempo:"2025-02-10",status:"Sebagian"},
-  {id:2,tanggal:"2025-01-18",supplier:"CV Logam Utama",invoice:"PO-0002",jumlah:45000000,dibayar:0,jatuhTempo:"2025-02-18",status:"Belum"},
-];
-
-const initInventory = [
-  {id:1,kode:"BB-001",nama:"Baja Plat 2mm",   kategori:"Bahan Baku", satuan:"Lembar",stok:200,hargaBeli:350000, hargaJual:500000, minimum:50},
-  {id:2,kode:"BJ-001",nama:"Komponen Mesin A",kategori:"Barang Jadi",satuan:"Unit",  stok:45, hargaBeli:750000, hargaJual:1200000,minimum:10},
-  {id:3,kode:"BJ-002",nama:"Komponen Mesin B",kategori:"Barang Jadi",satuan:"Unit",  stok:8,  hargaBeli:1200000,hargaJual:2000000,minimum:10},
-];
-
-const initTemplates = [
-  {id:1,nama:"Standard",layout:"standard",headerText:"PT Contoh Industri\nJl. Industri No. 1, Jakarta",footerText:"Terima kasih atas kepercayaan Anda.",showSignature:true,showStamp:false,logo:"",primaryColor:"#1e40af",accent:"#dbeafe"},
-  {id:2,nama:"Compact", layout:"compact", headerText:"PT Contoh Industri",                              footerText:"Pembayaran dalam 30 hari.",         showSignature:false,showStamp:false,logo:"",primaryColor:"#065f46",accent:"#d1fae5"},
-];
-
-const initCompany   = {nama:"PT Contoh Industri",alamat:"Jl. Industri No. 1, Jakarta 12345",telp:"021-1234567",email:"info@contoh.co.id",npwp:"01.234.567.8-901.000"};
 const initCustomers = [
-  {id:1,kode:"CUST-001",nama:"PT Maju Jaya",kontak:"Budi",telp:"021-1111111",email:"budi@majujaya.co.id", alamat:"Jakarta",npwp:"",limit:500000000,termin:30},
-  {id:2,kode:"CUST-002",nama:"CV Sejahtera",kontak:"Siti",telp:"022-2222222",email:"siti@sejahtera.co.id",alamat:"Bandung",npwp:"",limit:200000000,termin:14},
+  { id:1, kode:"CUST-001", nama:"PT Maju Jaya",  telp:"021-111", termin:30 },
+  { id:2, kode:"CUST-002", nama:"CV Sejahtera",   telp:"022-222", termin:14 },
+  { id:3, kode:"CUST-003", nama:"UD Berkah",       telp:"031-333", termin:21 },
 ];
+
 const initSuppliers = [
-  {id:1,kode:"SUPP-001",nama:"PT Bahan Prima",kontak:"Anton",telp:"021-3333333",email:"anton@bahanprima.co.id",alamat:"Bekasi",  npwp:"",termin:30},
-  {id:2,kode:"SUPP-002",nama:"CV Logam Utama",kontak:"Rudi", telp:"021-4444444",email:"rudi@logamutama.co.id",  alamat:"Cikarang",npwp:"",termin:45},
+  { id:1, kode:"SUPP-001", nama:"PT Bahan Prima", telp:"021-444", termin:30 },
+  { id:2, kode:"SUPP-002", nama:"CV Logam Utama", telp:"021-555", termin:45 },
 ];
 
-const csvCb = {set:null};
-const showCSV = (filename,headers,rows) => {
-  const csv=[headers.join(","),...rows.map(r=>headers.map(h=>`"${r[h]??""}"`).join(","))].join("\n");
-  if(typeof csvCb.set==="function")csvCb.set({filename,csv});
-};
+const initBank = [
+  { id:"TXN-001", tgl:"2026-04-01", ket:"Setoran modal awal",            tipe:"masuk",  jumlah:500000000, ref:"", saldo:500000000 },
+  { id:"TXN-002", tgl:"2026-04-05", ket:"Bayar supplier PT Bahan Prima",  tipe:"keluar", jumlah:80000000,  ref:"", saldo:420000000 },
+  { id:"TXN-003", tgl:"2026-04-10", ket:"Terima bayar INV-001",           tipe:"masuk",  jumlah:50000000,  ref:"INV-001", saldo:470000000 },
+];
 
-function CSVOutputModal({data,onClose}){
-  const [copied,setCopied]=useState(false);
-  const copy=()=>{navigator.clipboard.writeText(data.csv).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);});};
-  return(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg flex flex-col" style={{maxHeight:"80vh"}}>
-        <div className="flex justify-between items-center p-4 border-b"><div><div className="font-bold text-gray-700">{data.filename}</div><div className="text-xs text-gray-400 mt-0.5">Copy → Notepad → Save As "{data.filename}"</div></div><button onClick={onClose} className="text-gray-400 text-xl ml-3">✕</button></div>
-        <div className="overflow-auto flex-1 p-4"><pre className="text-xs bg-gray-50 border rounded-lg p-3 whitespace-pre-wrap break-all font-mono">{data.csv}</pre></div>
-        <div className="p-4 border-t flex gap-2">
-          <button onClick={copy} className={`flex-1 py-2.5 rounded-lg text-sm font-medium ${copied?"bg-green-600 text-white":"bg-blue-700 text-white"}`}>{copied?"✓ Tersalin!":"Copy CSV"}</button>
-          <button onClick={onClose} className="px-4 py-2.5 border rounded-lg text-sm text-gray-600">Tutup</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+const initPiutang = [
+  { id:"INV-001", tgl:"2026-04-01", due:"2026-05-01", customerId:1, total:150000000, dibayar:50000000, status:"Sebagian", items:[{prodId:1,qty:100,harga:1200000,diskon:0}], joId:"JO-001" },
+  { id:"INV-002", tgl:"2026-04-05", due:"2026-05-05", customerId:2, total:75000000,  dibayar:0,        status:"Belum",   items:[{prodId:3,qty:100,harga:750000,diskon:0}],  joId:"JO-002" },
+];
 
-function parseCSV(text){
-  const lines=text.trim().split("\n").map(l=>l.trim()).filter(Boolean);
-  if(lines.length<2)return{headers:[],rows:[]};
-  const headers=lines[0].split(",").map(h=>h.trim().replace(/^"|"$/g,""));
-  const rows=lines.slice(1).map(line=>{const vals=line.split(",").map(v=>v.trim().replace(/^"|"$/g,""));const obj={};headers.forEach((h,i)=>obj[h]=vals[i]||"");return obj;});
-  return{headers,rows};
-}
+const initHutang = [
+  { id:"PO-001", tgl:"2026-04-02", due:"2026-05-02", supplierId:1, total:80000000, dibayar:30000000, status:"Sebagian", items:[{bbId:1,qty:200,harga:350000}] },
+  { id:"PO-002", tgl:"2026-04-06", due:"2026-05-06", supplierId:2, total:45000000, dibayar:0,        status:"Belum",   items:[{bbId:2,qty:150,harga:85000}]  },
+];
 
-function CSVImportModal({moduleName,requiredHeaders,onImport,onClose,templateRows=[]}){
-  const [mode,setMode]=useState("tambah");const [preview,setPreview]=useState(null);const [error,setError]=useState("");const fileRef=useRef();
-  const dlTemplate=()=>showCSV(`template_${moduleName}.csv`,requiredHeaders,templateRows);
-  const handleFile=(e)=>{const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=(ev)=>{const{headers,rows}=parseCSV(ev.target.result);const missing=requiredHeaders.filter(h=>!headers.includes(h));if(missing.length){setError(`Kolom kurang: ${missing.join(", ")}`);setPreview(null);}else{setError("");setPreview({headers,rows});}};reader.readAsText(file);};
-  return(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
-        <div className="flex justify-between items-center p-4 border-b"><div className="font-bold text-gray-700">Import — {moduleName}</div><button onClick={onClose} className="text-gray-400 text-xl">✕</button></div>
-        <div className="p-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3 flex justify-between items-center"><span className="text-sm text-blue-700">Download template CSV</span><button onClick={dlTemplate} className="bg-blue-700 text-white px-3 py-1.5 rounded text-sm">Template</button></div>
-          <div className="flex gap-2 mb-3">{[["tambah","Tambah"],["replace","Replace"]].map(([v,l])=>(<label key={v} className={`flex-1 text-center px-3 py-2 rounded-lg border cursor-pointer text-sm ${mode===v?"border-blue-600 bg-blue-50 text-blue-700":"border-gray-200 text-gray-600"}`}><input type="radio" name="mode" checked={mode===v} onChange={()=>setMode(v)} className="hidden"/>{l}</label>))}</div>
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 mb-3" onClick={()=>fileRef.current.click()}><div className="text-sm text-gray-500">Klik pilih file CSV</div><input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleFile}/></div>
-          {error&&<div className="bg-red-50 border border-red-200 rounded p-3 text-sm text-red-600 mb-2">{error}</div>}
-          {preview&&<div className="text-sm text-green-600">✓ {preview.rows.length} baris siap diimport</div>}
-        </div>
-        <div className="flex gap-2 p-4 border-t">
-          <button onClick={onClose} className="flex-1 border rounded-lg py-2.5 text-sm text-gray-600">Batal</button>
-          <button onClick={()=>{if(preview){onImport(preview.rows,mode);onClose();}}} disabled={!preview||!!error} className="flex-1 bg-blue-700 text-white py-2.5 rounded-lg text-sm disabled:opacity-40">Import</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+const initJO = [
+  { id:"JO-001", invId:"INV-001", prodId:1, qty:100, status:"In Progress", tgl:"2026-04-01",
+    logs:[{tgl:"2026-04-02",ket:"Mulai produksi batch pertama",qty:30},{tgl:"2026-04-05",ket:"Batch pertama selesai QC",qty:30}] },
+  { id:"JO-002", invId:"INV-002", prodId:3, qty:100, status:"Draft", tgl:"2026-04-05", logs:[] },
+];
 
-function ConfirmDialog({message,onConfirm,onCancel}){
-  return(<div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4"><div className="bg-white rounded-xl p-5 shadow-xl max-w-sm w-full"><div className="text-gray-700 mb-5">{message}</div><div className="flex gap-3 justify-end"><button onClick={onCancel} className="px-4 py-2 text-sm border rounded-lg text-gray-600">Batal</button><button onClick={onConfirm} className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg">Hapus</button></div></div></div>);
-}
+const fmt   = n => "Rp " + Math.round(n||0).toLocaleString("id-ID");
+const today = () => new Date().toISOString().slice(0,10);
+const addDays = d => new Date(Date.now()+d*864e5).toISOString().slice(0,10);
+const uid   = pre => pre + "-" + String(Date.now()).slice(-6);
+const emptyRow = () => ({ id:Math.random(), prodId:"", qty:1, harga:0, diskon:0 });
+const emptyBB  = () => ({ id:Math.random(), bbId:"", qty:1, harga:0 });
 
-function BayarModal({item,tipe,akunKas,onSave,onClose}){
-  const safe=akunKas&&akunKas.length>0?akunKas:[{kode:BCA,nama:"Bank BCA"}];
-  const [bayar,setBayar]=useState("");const [akunDipilih,setAkunDipilih]=useState(safe[0].kode);
-  const sisa=item.jumlah-item.dibayar;
-  return(
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
-        <div className="flex justify-between items-center p-4 border-b"><div className="font-bold text-gray-700">{tipe==="piutang"?"Terima Pembayaran":"Bayar Hutang"}</div><button onClick={onClose} className="text-gray-400 text-xl">✕</button></div>
-        <div className="p-4">
-          <div className="text-sm text-gray-500 mb-0.5">{tipe==="piutang"?item.pelanggan:item.supplier}</div>
-          <div className="font-mono text-blue-600 text-sm mb-3">{item.invoice}</div>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div className="bg-gray-50 rounded-lg p-3"><div className="text-xs text-gray-400">Total</div><div className="font-medium text-sm">{fmt(item.jumlah)}</div></div>
-            <div className="bg-gray-50 rounded-lg p-3"><div className="text-xs text-gray-400">Sisa</div><div className="font-medium text-sm text-orange-600">{fmt(sisa)}</div></div>
-          </div>
-          <label className="text-xs text-gray-500">{tipe==="piutang"?"Diterima ke Akun":"Dibayar dari Akun"}</label>
-          <select className="w-full border rounded-lg p-2.5 text-sm mt-1 mb-3" value={akunDipilih} onChange={e=>setAkunDipilih(e.target.value)}>{safe.map(a=><option key={a.kode} value={a.kode}>{a.kode} — {a.nama}</option>)}</select>
-          <label className="text-xs text-gray-500">Nominal</label>
-          <input type="number" className="w-full border rounded-lg p-3 text-sm mt-1" placeholder="Masukkan nominal" value={bayar} onChange={e=>setBayar(e.target.value)} autoFocus/>
-          {bayar&&Number(bayar)>sisa&&<div className="text-xs text-red-500 mt-1">Melebihi sisa</div>}
-        </div>
-        <div className="flex gap-3 p-4 border-t">
-          <button onClick={onClose} className="flex-1 border rounded-lg py-2.5 text-sm text-gray-600">Batal</button>
-          <button onClick={()=>{if(Number(bayar)>0){onSave(Number(bayar),akunDipilih);onClose();}}} disabled={!bayar||Number(bayar)<=0} className={`flex-1 py-2.5 rounded-lg text-sm text-white font-medium disabled:opacity-40 ${tipe==="piutang"?"bg-amber-500":"bg-red-600"}`}>Catat & Jurnal</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── DASHBOARD ───────────────────────────────────────────────
-function Dashboard({labaRugi,totalAset,totalPiutang,totalHutang,lowStock,ar,ap}){
-  const cards=[
-    {label:"Total Aset", value:fmt(totalAset),   color:"bg-blue-600"},
-    {label:"Laba/Rugi",  value:fmt(labaRugi),    color:labaRugi>=0?"bg-green-600":"bg-red-600"},
-    {label:"Piutang",    value:fmt(totalPiutang), color:"bg-amber-500"},
-    {label:"Hutang",     value:fmt(totalHutang),  color:"bg-red-500"},
-  ];
-  return(
-    <div>
-      <h2 className="text-lg font-bold text-gray-700 mb-4">Ringkasan</h2>
-      <div className="grid grid-cols-2 gap-3 mb-5">
-        {cards.map(c=><div key={c.label} className={`${c.color} text-white rounded-xl p-4 shadow`}><div className="text-xs opacity-75 mb-1">{c.label}</div><div className="font-bold text-sm">{c.value}</div></div>)}
-      </div>
-      {lowStock.length>0&&<div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4"><div className="font-semibold text-red-700 mb-2 text-sm">Stok Menipis</div>{lowStock.map(i=><div key={i.id} className="text-sm text-red-600">{i.nama} — {i.stok} {i.satuan}</div>)}</div>}
-      <div className="grid grid-cols-1 gap-4">
-        <div className="bg-white rounded-xl p-4 shadow-sm border">
-          <div className="font-semibold text-gray-700 mb-3 text-sm">Piutang Terbaru</div>
-          {ar.slice(0,3).map((r,i)=>(
-            <div key={r.id} className="flex justify-between text-sm py-2 border-b last:border-0 items-start">
-              <div><div className="text-xs text-gray-400 mb-0.5">{i+1}. {r.invoice}</div><div className="font-medium text-gray-800">{r.pelanggan}</div><div className="text-gray-400 text-xs">JT: {fmtDate(r.jatuhTempo)}</div></div>
-              <div className="text-right"><div className="text-amber-600 font-medium">{fmt(r.jumlah-r.dibayar)}</div><div className="text-xs text-gray-400">{r.status}</div></div>
-            </div>
-          ))}
-          {ar.length===0&&<div className="text-gray-400 text-sm text-center py-3">Belum ada data</div>}
-        </div>
-        <div className="bg-white rounded-xl p-4 shadow-sm border">
-          <div className="font-semibold text-gray-700 mb-3 text-sm">Hutang Terbaru</div>
-          {ap.slice(0,3).map((r,i)=>(
-            <div key={r.id} className="flex justify-between text-sm py-2 border-b last:border-0 items-start">
-              <div><div className="text-xs text-gray-400 mb-0.5">{i+1}. {r.invoice}</div><div className="font-medium text-gray-800">{r.supplier}</div><div className="text-gray-400 text-xs">JT: {fmtDate(r.jatuhTempo)}</div></div>
-              <div className="text-right"><div className="text-red-600 font-medium">{fmt(r.jumlah-r.dibayar)}</div><div className="text-xs text-gray-400">{r.status}</div></div>
-            </div>
-          ))}
-          {ap.length===0&&<div className="text-gray-400 text-sm text-center py-3">Belum ada data</div>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── JURNAL ──────────────────────────────────────────────────
-function Jurnal({journals,setJournals,accounts}){
-  const empty={tanggal:today(),keterangan:"",entries:[{akun:"",posisi:"D",nominal:""},{akun:"",posisi:"K",nominal:""}]};
-  const [form,setForm]=useState(empty);const [show,setShow]=useState(false);const [confirm,setConfirm]=useState(null);
-  const addEntry=()=>setForm(f=>({...f,entries:[...f.entries,{akun:"",posisi:"D",nominal:""}]}));
-  const updEntry=(i,k,v)=>setForm(f=>{const e=[...f.entries];e[i]={...e[i],[k]:v};return{...f,entries:e};});
-  const totD=form.entries.filter(e=>e.posisi==="D").reduce((s,e)=>s+(Number(e.nominal)||0),0);
-  const totK=form.entries.filter(e=>e.posisi==="K").reduce((s,e)=>s+(Number(e.nominal)||0),0);
-  const ok=totD===totK&&totD>0;
-  const save=async()=>{if(!ok||!form.keterangan)return;const nj={...form,id:Date.now(),auto:false,entries:form.entries.map(e=>({...e,nominal:Number(e.nominal)}))};await db.addJournal(nj).catch(console.error);setJournals(j=>[...j,nj]);setForm(empty);setShow(false);};
-  const doConfirm=async()=>{if(!confirm)return;if(confirm.type==="all"){await db.clearJournals().catch(console.error);setJournals([]);}else{await db.deleteJournal(confirm.id).catch(console.error);setJournals(js=>js.filter(j=>j.id!==confirm.id));}setConfirm(null);};
-  return(
-    <div>
-      {confirm&&<ConfirmDialog message={confirm.type==="all"?"Hapus semua jurnal?":"Hapus jurnal ini?"} onConfirm={doConfirm} onCancel={()=>setConfirm(null)}/>}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-gray-700">Jurnal Umum</h2>
-        <div className="flex gap-2">
-          <button onClick={()=>setConfirm({type:"all"})} className="bg-red-100 text-red-600 border border-red-300 px-3 py-2 rounded-lg text-xs">Hapus</button>
-          <button onClick={()=>setShow(true)} className="bg-blue-700 text-white px-3 py-2 rounded-lg text-sm">+ Tambah</button>
-        </div>
-      </div>
-      {show&&(
-        <div className="bg-white border rounded-xl p-4 mb-5 shadow-sm">
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div><label className="text-xs text-gray-500">Tanggal</label><input type="date" className="w-full border rounded p-2 text-sm mt-1" value={form.tanggal} onChange={e=>setForm(f=>({...f,tanggal:e.target.value}))}/></div>
-            <div><label className="text-xs text-gray-500">Keterangan</label><input className="w-full border rounded p-2 text-sm mt-1" value={form.keterangan} onChange={e=>setForm(f=>({...f,keterangan:e.target.value}))}/></div>
-          </div>
-          {form.entries.map((e,i)=>(
-            <div key={i} className="grid grid-cols-12 gap-1 mb-2 items-center">
-              <div className="col-span-5"><select className="w-full border rounded p-1.5 text-sm" value={e.akun} onChange={v=>updEntry(i,"akun",v.target.value)}><option value="">-- Akun --</option>{accounts.map(a=><option key={a.kode} value={a.kode}>{a.kode} - {a.nama}</option>)}</select></div>
-              <div className="col-span-2"><select className="w-full border rounded p-1.5 text-sm" value={e.posisi} onChange={v=>updEntry(i,"posisi",v.target.value)}><option value="D">D</option><option value="K">K</option></select></div>
-              <div className="col-span-4"><input type="number" className="w-full border rounded p-1.5 text-sm text-right" value={e.nominal} onChange={v=>updEntry(i,"nominal",v.target.value)}/></div>
-              <div className="col-span-1 text-center"><button onClick={()=>setForm(f=>({...f,entries:f.entries.filter((_,idx)=>idx!==i)}))} className="text-red-400 text-xs">✕</button></div>
-            </div>
-          ))}
-          <div className={`text-xs mb-3 ${ok?"text-green-600":"text-red-500"}`}>D:{fmt(totD)} K:{fmt(totK)} {ok?"✓":"✗"}</div>
-          <div className="flex gap-2">
-            <button onClick={addEntry} className="border border-blue-600 text-blue-600 px-3 py-1.5 rounded text-sm">+ Baris</button>
-            <button onClick={save} disabled={!ok||!form.keterangan} className="bg-blue-700 text-white px-4 py-1.5 rounded text-sm disabled:opacity-40">Simpan</button>
-            <button onClick={()=>setShow(false)} className="text-gray-500 px-3 py-1.5 text-sm">Batal</button>
-          </div>
-        </div>
-      )}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        {journals.length===0&&<div className="p-8 text-center text-gray-400">Belum ada jurnal</div>}
-        {journals.map((j,idx)=>(
-          <div key={j.id} className="border-b last:border-0 p-4">
-            <div className="flex justify-between mb-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-gray-400">#{idx+1}</span>
-                <span className="font-medium text-gray-700 text-sm">{j.keterangan}</span>
-                {j.auto&&<span className="text-xs bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">auto</span>}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-400">{fmtDate(j.tanggal)}</span>
-                <button onClick={()=>setConfirm({type:"single",id:j.id})} className="text-red-400 text-xs border border-red-200 px-1.5 py-0.5 rounded">Hapus</button>
-              </div>
-            </div>
-            <table className="w-full text-xs"><tbody>{j.entries.map((e,i)=>{const acc=accounts.find(a=>a.kode===e.akun);return(<tr key={i} className="text-gray-600"><td className={`py-0.5 ${e.posisi==="K"?"pl-6":""}`}>{acc?`${acc.kode} - ${acc.nama}`:e.akun}</td><td className="text-right text-blue-700">{e.posisi==="D"?fmt(e.nominal):""}</td><td className="text-right text-green-700">{e.posisi==="K"?fmt(e.nominal):""}</td></tr>);})}</tbody></table>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── BUKU BESAR ──────────────────────────────────────────────
-function BukuBesar({accounts,journals,getBalance}){
-  const [sel,setSel]=useState(BCA);
-  const acc=accounts.find(a=>a.kode===sel);
-  const lines=[];let run=0;
-  journals.forEach(j=>j.entries.forEach(e=>{if(e.akun===sel){const isD=["Aset","Beban"].includes(acc?.kategori);run+=isD?(e.posisi==="D"?e.nominal:-e.nominal):(e.posisi==="K"?e.nominal:-e.nominal);lines.push({tanggal:j.tanggal,keterangan:j.keterangan,debit:e.posisi==="D"?e.nominal:0,kredit:e.posisi==="K"?e.nominal:0,saldo:run});}}));
-  return(
-    <div>
-      <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-bold text-gray-700">Buku Besar</h2><select className="border rounded-lg px-2 py-2 text-sm" value={sel} onChange={e=>setSel(e.target.value)}>{accounts.map(a=><option key={a.kode} value={a.kode}>{a.kode} - {a.nama}</option>)}</select></div>
-      {acc&&<div className="bg-white rounded-xl shadow-sm border overflow-hidden"><div className="bg-blue-800 text-white px-4 py-3"><div className="font-bold text-sm">{acc.kode} - {acc.nama}</div><div className="text-blue-200 text-xs">{acc.kategori} · Saldo: {fmt(getBalance(acc.kode,acc.kategori))}</div></div><div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="bg-gray-50 text-gray-500 border-b"><th className="p-3 text-left">Tgl</th><th className="p-3 text-left">Ket</th><th className="p-3 text-right">Debit</th><th className="p-3 text-right">Kredit</th><th className="p-3 text-right">Saldo</th></tr></thead><tbody>{lines.map((l,i)=><tr key={i} className="border-b last:border-0"><td className="p-3 text-gray-500">{fmtDate(l.tanggal)}</td><td className="p-3">{l.keterangan}</td><td className="p-3 text-right text-blue-700">{l.debit?fmt(l.debit):"-"}</td><td className="p-3 text-right text-green-700">{l.kredit?fmt(l.kredit):"-"}</td><td className="p-3 text-right font-medium">{fmt(l.saldo)}</td></tr>)}{lines.length===0&&<tr><td colSpan={5} className="p-6 text-center text-gray-400">Belum ada transaksi</td></tr>}</tbody></table></div></div>}
-    </div>
-  );
-}
-
-// ─── PIUTANG ─────────────────────────────────────────────────
-function Piutang({ar,setAr,setJournals,inventory,customers,akunKas,onPrint}){
-  const [show,setShow]=useState(false);const [bayarItem,setBayarItem]=useState(null);const [showCSVModal,setShowCSVModal]=useState(false);
-  const [items,setItems]=useState([{nama:"",qty:1,harga:"",subtotal:0}]);
-  const [form,setForm]=useState({tanggal:today(),pelanggan:"",invoice:"",jatuhTempo:"",catatan:""});
-  const [diskon,setDiskon]=useState(0);const [ppnPct,setPpnPct]=useState(11);const [ppnAktif,setPpnAktif]=useState(false);
-  const initForm=()=>{setForm({tanggal:today(),pelanggan:"",invoice:genInvNo(ar),jatuhTempo:"",catatan:""});setItems([{nama:"",qty:1,harga:"",diskon:0,subtotal:0}]);setDiskon(0);setPpnPct(11);setPpnAktif(false);setShow(true);};
-  const updItem=(i,k,v)=>setItems(its=>its.map((it,idx)=>{if(idx!==i)return it;const u={...it,[k]:v};const qty=Number(k==="qty"?v:u.qty)||0;const harga=Number(k==="harga"?v:u.harga)||0;const disc=Number(k==="diskon"?v:u.diskon)||0;u.subtotal=qty*harga*(1-disc/100);return u;}));
-  const subtotal=items.reduce((s,it)=>s+(it.subtotal||0),0);
-  const diskonNom=subtotal*(diskon/100);const dpp=subtotal-diskonNom;const ppnNom=ppnAktif?dpp*(ppnPct/100):0;const total=dpp+ppnNom;
-  const addJ=(ket,tgl,entries)=>setJournals(js=>[...js,{id:Date.now(),tanggal:tgl,keterangan:ket,auto:true,entries}]);
-  const save=async()=>{if(!form.pelanggan||!total)return;const nar={...form,id:Date.now(),jumlah:total,dibayar:0,status:"Belum",items:items.map(it=>({...it,qty:Number(it.qty),harga:Number(it.harga)})),diskon,ppnPct:ppnAktif?ppnPct:0,ppnNominal:ppnNom,dpp,subtotalSebelumDiskon:subtotal};await db.addAR(nar).catch(console.error);setAr(a=>[...a,nar]);addJ(`Penjualan [${form.invoice}] ${form.pelanggan}`,form.tanggal,[{akun:PIUTANG,posisi:"D",nominal:total},{akun:PENJUALAN,posisi:"K",nominal:dpp},...(ppnAktif?[{akun:"2-103",posisi:"K",nominal:ppnNom}]:[])]);setShow(false);};
-  const handleBayar=async(nominal,akunDebit)=>{if(!bayarItem)return;const bid=bayarItem.id;setAr(a=>a.map(r=>{if(r.id!==bid)return r;const nd=Math.min(r.dibayar+nominal,r.jumlah);const upd={...r,dibayar:nd,status:nd>=r.jumlah?"Lunas":"Sebagian"};db.updateAR(bid,upd).catch(console.error);return upd;}));addJ(`Terima Pembayaran [${bayarItem.invoice}] ${bayarItem.pelanggan}`,today(),[{akun:akunDebit,posisi:"D",nominal},{akun:PIUTANG,posisi:"K",nominal}]);};
-  return(
-    <div>
-      {bayarItem&&<BayarModal item={bayarItem} tipe="piutang" akunKas={akunKas} onSave={handleBayar} onClose={()=>setBayarItem(null)}/>}
-      {showCSVModal&&<CSVImportModal moduleName="Piutang" requiredHeaders={["tanggal","pelanggan","invoice","jumlah","dibayar","jatuhTempo"]} templateRows={[{tanggal:"2025-01-15",pelanggan:"PT Contoh",invoice:"INV-001",jumlah:"10000000",dibayar:"0",jatuhTempo:"2025-02-15",catatan:""}]} onImport={(rows,mode)=>{const d=rows.map((r,i)=>({id:Date.now()+i,tanggal:r.tanggal,pelanggan:r.pelanggan,invoice:r.invoice,jumlah:Number(r.jumlah)||0,dibayar:Number(r.dibayar)||0,jatuhTempo:r.jatuhTempo,catatan:r.catatan||"",items:[],status:Number(r.dibayar)>=Number(r.jumlah)?"Lunas":Number(r.dibayar)>0?"Sebagian":"Belum"}));setAr(a=>mode==="replace"?d:[...a,...d]);}} onClose={()=>setShowCSVModal(false)}/>}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-gray-700">Piutang Usaha</h2>
-        <div className="flex gap-2">
-          <button onClick={()=>setShowCSVModal(true)} className="bg-green-100 text-green-700 border border-green-300 px-3 py-2 rounded-lg text-xs">CSV</button>
-          <button onClick={initForm} className="bg-blue-700 text-white px-3 py-2 rounded-lg text-sm">+ Invoice</button>
-        </div>
-      </div>
-      {show&&(
-        <div className="bg-white border rounded-xl p-4 mb-5 shadow-sm">
-          <div className="font-semibold text-gray-600 mb-3 text-sm">Invoice Baru</div>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div><label className="text-xs text-gray-500">No. Invoice</label><input className="w-full border rounded p-2 text-sm mt-1 bg-gray-50" value={form.invoice} readOnly/></div>
-            <div><label className="text-xs text-gray-500">Tanggal</label><input type="date" className="w-full border rounded p-2 text-sm mt-1" value={form.tanggal} onChange={e=>setForm(f=>({...f,tanggal:e.target.value}))}/></div>
-            <div className="col-span-2"><label className="text-xs text-gray-500">Pelanggan</label><input list="cust-list" className="w-full border rounded p-2 text-sm mt-1" placeholder="Ketik nama pelanggan..." value={form.pelanggan} onChange={e=>{const c=customers.find(x=>x.nama===e.target.value);setForm(f=>({...f,pelanggan:e.target.value,...(c&&f.tanggal&&c.termin?{jatuhTempo:new Date(new Date(f.tanggal).getTime()+c.termin*86400000).toISOString().slice(0,10)}:{})}));}}/><datalist id="cust-list">{customers.map(c=><option key={c.id} value={c.nama}/>)}</datalist></div>
-            <div><label className="text-xs text-gray-500">Jatuh Tempo</label><input type="date" className="w-full border rounded p-2 text-sm mt-1" value={form.jatuhTempo} onChange={e=>setForm(f=>({...f,jatuhTempo:e.target.value}))}/></div>
-            <div><label className="text-xs text-gray-500">Catatan</label><input className="w-full border rounded p-2 text-sm mt-1" value={form.catatan} onChange={e=>setForm(f=>({...f,catatan:e.target.value}))}/></div>
-          </div>
-          <div className="text-xs font-semibold text-gray-500 mb-2">ITEM</div>
-          <div className="grid grid-cols-12 gap-1 mb-1 text-xs text-gray-400 px-1"><div className="col-span-4">Nama</div><div className="col-span-2 text-center">Qty</div><div className="col-span-2 text-right">Harga</div><div className="col-span-2 text-right">Disc%</div><div className="col-span-1 text-right">Sub</div><div className="col-span-1"/></div>
-          {items.map((it,i)=>(
-            <div key={i} className="grid grid-cols-12 gap-1 mb-2 items-center">
-              <div className="col-span-4"><input list={`ii-${i}`} className="w-full border rounded p-1.5 text-sm" placeholder="Nama barang" value={it.nama} onChange={e=>{const p=inventory.find(x=>x.nama===e.target.value);updItem(i,"nama",e.target.value);if(p)updItem(i,"harga",p.hargaJual);}}/><datalist id={`ii-${i}`}>{inventory.map(p=><option key={p.id} value={p.nama}/>)}</datalist></div>
-              <div className="col-span-2"><input type="number" className="w-full border rounded p-1.5 text-sm text-center" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)}/></div>
-              <div className="col-span-2"><input type="number" className="w-full border rounded p-1.5 text-sm text-right" value={it.harga} onChange={e=>updItem(i,"harga",e.target.value)}/></div>
-              <div className="col-span-2"><input type="number" className="w-full border rounded p-1.5 text-sm text-right" placeholder="0" value={it.diskon||""} onChange={e=>updItem(i,"diskon",e.target.value)}/></div>
-              <div className="col-span-1 text-xs text-gray-500 text-right">{it.subtotal>0?(it.subtotal/1000000).toFixed(1)+"jt":""}</div>
-              <div className="col-span-1 text-center"><button onClick={()=>setItems(its=>its.filter((_,idx)=>idx!==i))} className="text-red-400 text-xs">✕</button></div>
-            </div>
-          ))}
-          <button onClick={()=>setItems(its=>[...its,{nama:"",qty:1,harga:"",diskon:0,subtotal:0}])} className="text-blue-600 text-xs border border-blue-200 px-2 py-1 rounded mb-4">+ Item</button>
-          <div className="bg-gray-50 rounded-xl p-3 mb-4 space-y-2">
-            <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal</span><span>{fmt(subtotal)}</span></div>
-            <div className="flex items-center gap-2"><span className="text-sm text-gray-500 flex-1">Diskon</span><div className="flex items-center gap-1"><input type="number" className="w-16 border rounded p-1 text-sm text-right" placeholder="0" value={diskon||""} onChange={e=>setDiskon(Number(e.target.value))}/><span className="text-sm text-gray-400">%</span></div><span className="text-sm text-red-500 w-24 text-right">({fmt(diskonNom)})</span></div>
-            <div className="flex justify-between text-sm font-medium border-t pt-2"><span className="text-gray-600">DPP</span><span>{fmt(dpp)}</span></div>
-            <div className="flex items-center gap-2"><label className="flex items-center gap-1.5 cursor-pointer flex-1"><input type="checkbox" checked={ppnAktif} onChange={e=>setPpnAktif(e.target.checked)} className="rounded"/><span className="text-sm text-gray-500">PPN</span></label>{ppnAktif&&<div className="flex items-center gap-1"><input type="number" className="w-16 border rounded p-1 text-sm text-right" value={ppnPct} onChange={e=>setPpnPct(Number(e.target.value))}/><span className="text-sm text-gray-400">%</span></div>}<span className="text-sm text-gray-600 w-24 text-right">{ppnAktif?fmt(ppnNom):"-"}</span></div>
-            <div className="flex justify-between font-bold text-base border-t pt-2"><span>Total</span><span className="text-blue-700">{fmt(total)}</span></div>
-          </div>
-          <div className="flex gap-2"><button onClick={save} disabled={!form.pelanggan||!total} className="bg-blue-700 text-white px-4 py-2 rounded text-sm disabled:opacity-40">Simpan & Jurnal</button><button onClick={()=>setShow(false)} className="text-gray-500 px-3 py-2 text-sm border rounded">Batal</button></div>
-        </div>
-      )}
-      <div className="space-y-3">
-        {ar.map((r,idx)=>(
-          <div key={r.id} className="bg-white rounded-xl border shadow-sm p-4">
-            <div className="flex justify-between items-start mb-2">
-              <div><div className="text-xs text-gray-400 mb-0.5">#{idx+1} · {r.invoice}</div><div className="font-semibold text-gray-800">{r.pelanggan}</div></div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${r.status==="Lunas"?"bg-green-100 text-green-700":r.status==="Sebagian"?"bg-yellow-100 text-yellow-700":"bg-red-100 text-red-700"}`}>{r.status}</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-xs text-gray-500 mb-2">
-              <div><div>Total</div><div className="font-medium text-gray-700">{fmt(r.jumlah)}</div></div>
-              <div><div>Dibayar</div><div className="font-medium text-green-600">{fmt(r.dibayar)}</div></div>
-              <div><div>Sisa</div><div className="font-medium text-amber-600">{fmt(r.jumlah-r.dibayar)}</div></div>
-            </div>
-            {(r.ppnNominal>0||r.diskon>0)&&<div className="flex gap-2 text-xs mb-2">{r.diskon>0&&<span className="bg-orange-50 text-orange-600 px-2 py-0.5 rounded">Diskon {r.diskon}%</span>}{r.ppnNominal>0&&<span className="bg-purple-50 text-purple-600 px-2 py-0.5 rounded">PPN {r.ppnPct}%</span>}</div>}
-            <div className="text-xs text-gray-400 mb-3">JT: {fmtDate(r.jatuhTempo)}</div>
-            <div className="flex gap-2">
-              {r.status!=="Lunas"&&<button onClick={()=>setBayarItem(r)} className="flex-1 bg-amber-500 text-white py-2 rounded-lg text-sm font-medium">Bayar</button>}
-              <button onClick={()=>onPrint(r)} className="flex-1 bg-blue-700 text-white py-2 rounded-lg text-sm font-medium">Invoice</button>
-            </div>
-          </div>
-        ))}
-        {ar.length===0&&<div className="text-center text-gray-400 py-8">Belum ada piutang</div>}
-      </div>
-    </div>
-  );
-}
-
-// ─── HUTANG ──────────────────────────────────────────────────
-function Hutang({ap,setAp,setJournals,suppliers,akunKas}){
-  const [show,setShow]=useState(false);const [bayarItem,setBayarItem]=useState(null);const [showCSVModal,setShowCSVModal]=useState(false);
-  const [items,setItems]=useState([{nama:"",qty:1,harga:"",subtotal:0}]);
-  const [diskon,setDiskon]=useState(0);const [ppnPct,setPpnPct]=useState(11);const [ppnAktif,setPpnAktif]=useState(false);
-  const [form,setForm]=useState({tanggal:today(),supplier:"",invoice:"",jatuhTempo:""});
-  const updItem=(i,k,v)=>setItems(its=>its.map((it,idx)=>{if(idx!==i)return it;const u={...it,[k]:v};const qty=Number(k==="qty"?v:u.qty)||0;const harga=Number(k==="harga"?v:u.harga)||0;const disc=Number(k==="diskon"?v:u.diskon)||0;u.subtotal=qty*harga*(1-disc/100);return u;}));
-  const subtotal=items.reduce((s,it)=>s+(it.subtotal||0),0);
-  const diskonNom=subtotal*(diskon/100);const dpp=subtotal-diskonNom;const ppnNom=ppnAktif?dpp*(ppnPct/100):0;const total=dpp+ppnNom;
-  const initForm=()=>{setForm({tanggal:today(),supplier:"",invoice:genPONo(ap),jatuhTempo:""});setItems([{nama:"",qty:1,harga:"",diskon:0,subtotal:0}]);setDiskon(0);setPpnPct(11);setPpnAktif(false);setShow(true);};
-  const addJ=(ket,tgl,entries)=>setJournals(js=>[...js,{id:Date.now(),tanggal:tgl,keterangan:ket,auto:true,entries}]);
-  const save=async()=>{if(!form.supplier||!total)return;const nap={...form,id:Date.now(),jumlah:total,dibayar:0,status:"Belum",items:items.map(it=>({...it,qty:Number(it.qty),harga:Number(it.harga)})),diskon,ppnPct:ppnAktif?ppnPct:0,ppnNominal:ppnNom,dpp};await db.addAP(nap).catch(console.error);setAp(a=>[...a,nap]);addJ(`Pembelian [${form.invoice}] ${form.supplier}`,form.tanggal,[{akun:PERSBB,posisi:"D",nominal:dpp},{akun:HUTANG_U,posisi:"K",nominal:total},...(ppnAktif?[{akun:"1-106",posisi:"D",nominal:ppnNom}]:[])]);setShow(false);};
-  const handleBayar=async(nominal,akunKredit)=>{if(!bayarItem)return;const bid=bayarItem.id;setAp(a=>a.map(r=>{if(r.id!==bid)return r;const nd=Math.min(r.dibayar+nominal,r.jumlah);const upd={...r,dibayar:nd,status:nd>=r.jumlah?"Lunas":"Sebagian"};db.updateAP(bid,upd).catch(console.error);return upd;}));addJ(`Bayar Hutang [${bayarItem.invoice}] ${bayarItem.supplier}`,today(),[{akun:HUTANG_U,posisi:"D",nominal},{akun:akunKredit,posisi:"K",nominal}]);};
-  return(
-    <div>
-      {bayarItem&&<BayarModal item={bayarItem} tipe="hutang" akunKas={akunKas} onSave={handleBayar} onClose={()=>setBayarItem(null)}/>}
-      {showCSVModal&&<CSVImportModal moduleName="Hutang" requiredHeaders={["tanggal","supplier","invoice","jumlah","dibayar","jatuhTempo"]} templateRows={[{tanggal:"2025-01-10",supplier:"PT Supplier",invoice:"PO-0001",jumlah:"5000000",dibayar:"0",jatuhTempo:"2025-02-10"}]} onImport={(rows,mode)=>{const d=rows.map((r,i)=>({id:Date.now()+i,tanggal:r.tanggal,supplier:r.supplier,invoice:r.invoice,jumlah:Number(r.jumlah)||0,dibayar:Number(r.dibayar)||0,jatuhTempo:r.jatuhTempo,items:[],status:Number(r.dibayar)>=Number(r.jumlah)?"Lunas":Number(r.dibayar)>0?"Sebagian":"Belum"}));setAp(a=>mode==="replace"?d:[...a,...d]);}} onClose={()=>setShowCSVModal(false)}/>}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-gray-700">Hutang Usaha</h2>
-        <div className="flex gap-2">
-          <button onClick={()=>setShowCSVModal(true)} className="bg-green-100 text-green-700 border border-green-300 px-3 py-2 rounded-lg text-xs">CSV</button>
-          <button onClick={initForm} className="bg-blue-700 text-white px-3 py-2 rounded-lg text-sm">+ PO Baru</button>
-        </div>
-      </div>
-      {show&&(
-        <div className="bg-white border rounded-xl p-4 mb-5 shadow-sm">
-          <div className="font-semibold text-gray-600 mb-3 text-sm">PO Baru</div>
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            <div><label className="text-xs text-gray-500">No. PO</label><input className="w-full border rounded p-2 text-sm mt-1 bg-gray-50" value={form.invoice} readOnly/></div>
-            <div><label className="text-xs text-gray-500">Tanggal</label><input type="date" className="w-full border rounded p-2 text-sm mt-1" value={form.tanggal} onChange={e=>setForm(f=>({...f,tanggal:e.target.value}))}/></div>
-            <div className="col-span-2"><label className="text-xs text-gray-500">Supplier</label><input list="supp-list" className="w-full border rounded p-2 text-sm mt-1" placeholder="Ketik nama supplier..." value={form.supplier} onChange={e=>{const s=suppliers.find(x=>x.nama===e.target.value);setForm(f=>({...f,supplier:e.target.value,...(s&&f.tanggal?{jatuhTempo:new Date(new Date(f.tanggal).getTime()+s.termin*86400000).toISOString().slice(0,10)}:{})}));}}/><datalist id="supp-list">{suppliers.map(s=><option key={s.id} value={s.nama}/>)}</datalist></div>
-            <div><label className="text-xs text-gray-500">Jatuh Tempo</label><input type="date" className="w-full border rounded p-2 text-sm mt-1" value={form.jatuhTempo} onChange={e=>setForm(f=>({...f,jatuhTempo:e.target.value}))}/></div>
-          </div>
-          <div className="text-xs font-semibold text-gray-500 mb-2">ITEM</div>
-          <div className="grid grid-cols-12 gap-1 mb-1 text-xs text-gray-400 px-1"><div className="col-span-4">Nama</div><div className="col-span-2 text-center">Qty</div><div className="col-span-2 text-right">Harga</div><div className="col-span-2 text-right">Disc%</div><div className="col-span-1 text-right">Sub</div><div className="col-span-1"/></div>
-          {items.map((it,i)=>(
-            <div key={i} className="grid grid-cols-12 gap-1 mb-2 items-center">
-              <div className="col-span-4"><input className="w-full border rounded p-1.5 text-sm" placeholder="Nama barang" value={it.nama} onChange={e=>updItem(i,"nama",e.target.value)}/></div>
-              <div className="col-span-2"><input type="number" className="w-full border rounded p-1.5 text-sm text-center" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)}/></div>
-              <div className="col-span-2"><input type="number" className="w-full border rounded p-1.5 text-sm text-right" value={it.harga} onChange={e=>updItem(i,"harga",e.target.value)}/></div>
-              <div className="col-span-2"><input type="number" className="w-full border rounded p-1.5 text-sm text-right" placeholder="0" value={it.diskon||""} onChange={e=>updItem(i,"diskon",e.target.value)}/></div>
-              <div className="col-span-1 text-xs text-gray-500 text-right">{it.subtotal>0?(it.subtotal/1000000).toFixed(1)+"jt":""}</div>
-              <div className="col-span-1 text-center"><button onClick={()=>setItems(its=>its.filter((_,idx)=>idx!==i))} className="text-red-400 text-xs">✕</button></div>
-            </div>
-          ))}
-          <button onClick={()=>setItems(its=>[...its,{nama:"",qty:1,harga:"",diskon:0,subtotal:0}])} className="text-blue-600 text-xs border border-blue-200 px-2 py-1 rounded mb-4">+ Item</button>
-          <div className="bg-gray-50 rounded-xl p-3 mb-4 space-y-2">
-            <div className="flex justify-between text-sm"><span className="text-gray-500">Subtotal</span><span>{fmt(subtotal)}</span></div>
-            <div className="flex items-center gap-2"><span className="text-sm text-gray-500 flex-1">Diskon</span><div className="flex items-center gap-1"><input type="number" className="w-16 border rounded p-1 text-sm text-right" placeholder="0" value={diskon||""} onChange={e=>setDiskon(Number(e.target.value))}/><span className="text-sm text-gray-400">%</span></div><span className="text-sm text-red-500 w-24 text-right">({fmt(diskonNom)})</span></div>
-            <div className="flex justify-between text-sm font-medium border-t pt-2"><span className="text-gray-600">DPP</span><span>{fmt(dpp)}</span></div>
-            <div className="flex items-center gap-2"><label className="flex items-center gap-1.5 cursor-pointer flex-1"><input type="checkbox" checked={ppnAktif} onChange={e=>setPpnAktif(e.target.checked)} className="rounded"/><span className="text-sm text-gray-500">PPN Masukan</span></label>{ppnAktif&&<div className="flex items-center gap-1"><input type="number" className="w-16 border rounded p-1 text-sm text-right" value={ppnPct} onChange={e=>setPpnPct(Number(e.target.value))}/><span className="text-sm text-gray-400">%</span></div>}<span className="text-sm text-gray-600 w-24 text-right">{ppnAktif?fmt(ppnNom):"-"}</span></div>
-            <div className="flex justify-between font-bold text-base border-t pt-2"><span>Total</span><span className="text-blue-700">{fmt(total)}</span></div>
-          </div>
-          <div className="flex gap-2"><button onClick={save} disabled={!form.supplier||!total} className="bg-blue-700 text-white px-4 py-2 rounded text-sm disabled:opacity-40">Simpan & Jurnal</button><button onClick={()=>setShow(false)} className="text-gray-500 px-3 py-2 text-sm border rounded">Batal</button></div>
-        </div>
-      )}
-      <div className="space-y-3">
-        {ap.map((r,idx)=>(
-          <div key={r.id} className="bg-white rounded-xl border shadow-sm p-4">
-            <div className="flex justify-between items-start mb-2">
-              <div><div className="text-xs text-gray-400 mb-0.5">#{idx+1} · {r.invoice}</div><div className="font-semibold text-gray-800">{r.supplier}</div></div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${r.status==="Lunas"?"bg-green-100 text-green-700":r.status==="Sebagian"?"bg-yellow-100 text-yellow-700":"bg-red-100 text-red-700"}`}>{r.status}</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-xs text-gray-500 mb-2">
-              <div><div>Total</div><div className="font-medium text-gray-700">{fmt(r.jumlah)}</div></div>
-              <div><div>Dibayar</div><div className="font-medium text-green-600">{fmt(r.dibayar)}</div></div>
-              <div><div>Sisa</div><div className="font-medium text-red-600">{fmt(r.jumlah-r.dibayar)}</div></div>
-            </div>
-            <div className="text-xs text-gray-400 mb-3">JT: {fmtDate(r.jatuhTempo)}</div>
-            {r.status!=="Lunas"&&<button onClick={()=>setBayarItem(r)} className="w-full bg-red-600 text-white py-2 rounded-lg text-sm font-medium">Bayar Hutang</button>}
-          </div>
-        ))}
-        {ap.length===0&&<div className="text-center text-gray-400 py-8">Belum ada hutang</div>}
-      </div>
-    </div>
-  );
-}
-
-// ─── INVENTORY ───────────────────────────────────────────────
-function Inventory({inventory,setInventory,setJournals}){
-  const [show,setShow]=useState(false);const [adj,setAdj]=useState(null);const [showCSVModal,setShowCSVModal]=useState(false);
-  const [form,setForm]=useState({kode:"",nama:"",kategori:"Bahan Baku",satuan:"Unit",stok:"",hargaBeli:"",hargaJual:"",minimum:""});
-  const [qty,setQty]=useState("");const [tipe,setTipe]=useState("masuk");
-  const akunPers=(kat)=>kat==="Barang Jadi"?PERSBJ:PERSBB;
-  const genSKU=(kat)=>{
-    const prefix=kat==="Bahan Baku"?"BB":kat==="Barang Jadi"?"BJ":"BP";
-    const nums=inventory.filter(i=>i.kategori===kat).map(i=>parseInt((i.kode||"").replace(/\D/g,""))).filter(Boolean);
-    const next=nums.length?Math.max(...nums)+1:1;
-    return prefix+"-"+String(next).padStart(3,"0");
+// ─── ICONS ────────────────────────────────────────────────────
+function Ic({ n, s=16 }) {
+  const paths = {
+    dash:  "M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z",
+    bank:  "M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2zM9 22V12h6v10",
+    ar:    "M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M8 13h8M8 17h5",
+    ap:    "M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0",
+    prod:  "M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",
+    inv:   "M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z",
+    master:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75",
+    plus:  "M12 5v14M5 12h14",
+    x:     "M18 6L6 18M6 6l12 12",
+    save:  "M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21V13H7v8M7 3v5h8",
+    search:"M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z",
+    trash: "M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6",
+    upload:"M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12",
+    check: "M20 6L9 17l-5-5",
+    log:   "M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11",
+    arrow: "M5 12h14M12 5l7 7-7 7",
+    eye:   "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z",
   };
-  const save=async()=>{if(!form.nama)return;const stok=Number(form.stok),hargaBeli=Number(form.hargaBeli);const ni={...form,id:Date.now(),stok,hargaBeli,hargaJual:Number(form.hargaJual),minimum:Number(form.minimum)};await db.addInventory(ni).catch(console.error);setInventory(i=>[...i,ni]);if(stok>0&&hargaBeli>0)setJournals(js=>[...js,{id:Date.now()+1,tanggal:today(),keterangan:`Stok Awal - ${form.nama}`,auto:true,entries:[{akun:akunPers(form.kategori),posisi:"D",nominal:stok*hargaBeli},{akun:MODAL,posisi:"K",nominal:stok*hargaBeli}]}]);setForm({kode:"",nama:"",kategori:"Bahan Baku",satuan:"Unit",stok:"",hargaBeli:"",hargaJual:"",minimum:""});setShow(false);};
-  const saveAdj=async()=>{const q=Number(qty);if(!q||!adj)return;const nilai=q*adj.hargaBeli,akun=akunPers(adj.kategori);setInventory(i=>i.map(it=>{if(it.id!==adj.id)return it;const upd={...it,stok:tipe==="masuk"?it.stok+q:Math.max(0,it.stok-q)};db.updateInventory(it.id,upd).catch(console.error);return upd;}));setJournals(js=>[...js,{id:Date.now(),tanggal:today(),keterangan:`Penyesuaian ${tipe==="masuk"?"Masuk":"Keluar"} - ${adj.nama}`,auto:true,entries:tipe==="masuk"?[{akun,posisi:"D",nominal:nilai},{akun:MODAL,posisi:"K",nominal:nilai}]:[{akun:HPP,posisi:"D",nominal:nilai},{akun,posisi:"K",nominal:nilai}]}]);setAdj(null);setQty("");};
-  return(
-    <div>
-      {showCSVModal&&<CSVImportModal moduleName="Inventory" requiredHeaders={["kode","nama","kategori","satuan","stok","hargaBeli","hargaJual","minimum"]} templateRows={[{kode:"BB-001",nama:"Baja Plat",kategori:"Bahan Baku",satuan:"Lembar",stok:"100",hargaBeli:"350000",hargaJual:"0",minimum:"20"}]} onImport={(rows,mode)=>{const d=rows.map((r,i)=>({id:Date.now()+i,kode:r.kode,nama:r.nama,kategori:r.kategori,satuan:r.satuan,stok:Number(r.stok)||0,hargaBeli:Number(r.hargaBeli)||0,hargaJual:Number(r.hargaJual)||0,minimum:Number(r.minimum)||0}));setInventory(i=>mode==="replace"?d:[...i,...d]);}} onClose={()=>setShowCSVModal(false)}/>}
-      {adj&&(<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"><div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-5"><div className="font-bold text-gray-700 mb-3">Penyesuaian Stok — {adj.nama}</div><div className="flex gap-2 mb-4">{[["masuk","Masuk"],["keluar","Keluar"]].map(([v,l])=><button key={v} onClick={()=>setTipe(v)} className={`flex-1 py-2 rounded-lg text-sm ${tipe===v?"bg-blue-700 text-white":"border text-gray-600"}`}>{l}</button>)}</div><input type="number" className="w-full border rounded-lg p-3 text-sm mb-4" placeholder="Qty" value={qty} onChange={e=>setQty(e.target.value)} autoFocus/><div className="flex gap-2"><button onClick={()=>{setAdj(null);setQty("");}} className="flex-1 border rounded-lg py-2.5 text-sm text-gray-600">Batal</button><button onClick={saveAdj} disabled={!qty} className="flex-1 bg-blue-700 text-white py-2.5 rounded-lg text-sm disabled:opacity-40">Simpan</button></div></div></div>)}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-gray-700">Inventory</h2>
-        <div className="flex gap-2">
-          <button onClick={()=>setShowCSVModal(true)} className="bg-green-100 text-green-700 border border-green-300 px-3 py-2 rounded-lg text-xs">CSV</button>
-          <button onClick={()=>setShow(true)} className="bg-blue-700 text-white px-3 py-2 rounded-lg text-sm">+ Item</button>
-        </div>
+  return (
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d={paths[n] || ""} />
+    </svg>
+  );
+}
+
+// ─── SHARED UI ────────────────────────────────────────────────
+function Badge({ s }) {
+  const m = {
+    Lunas:["#dcfce7","#16a34a"], Sebagian:["#fef9c3","#ca8a04"], Belum:["#fee2e2","#dc2626"],
+    Draft:["#f1f5f9","#64748b"], "In Progress":["#dbeafe","#2563eb"], Selesai:["#dcfce7","#16a34a"],
+    masuk:["#dcfce7","#16a34a"], keluar:["#fee2e2","#dc2626"],
+  };
+  const [bg,col] = m[s] || ["#f1f5f9","#64748b"];
+  return <span style={{background:bg,color:col,fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:99,whiteSpace:"nowrap"}}>{s}</span>;
+}
+
+function Btn({ children, variant="primary", onClick, style={} }) {
+  const vs = {
+    primary:{background:"#6366f1",color:"#fff",border:"none",boxShadow:"0 2px 6px rgba(99,102,241,0.3)"},
+    ghost:  {background:"#fff",color:"#64748b",border:"1.5px solid #e2e8f0"},
+    danger: {background:"#fee2e2",color:"#dc2626",border:"none"},
+    success:{background:"#dcfce7",color:"#16a34a",border:"none"},
+    warning:{background:"#fef9c3",color:"#ca8a04",border:"none"},
+  };
+  return (
+    <button onClick={onClick} style={{padding:"7px 14px",borderRadius:9,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:5,...vs[variant],...style}}>
+      {children}
+    </button>
+  );
+}
+
+function Card({ children, style={} }) {
+  return <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f5f9",boxShadow:"0 1px 4px rgba(0,0,0,0.04)",...style}}>{children}</div>;
+}
+
+function CardHeader({ title, icon, right }) {
+  return (
+    <div style={{padding:"13px 16px",borderBottom:"1px solid #f8fafc",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <div style={{display:"flex",alignItems:"center",gap:7,fontWeight:700,fontSize:13,color:"#1e293b"}}>
+        <span style={{color:"#6366f1"}}><Ic n={icon} s={14}/></span>{title}
       </div>
-      {show&&(
-        <div className="bg-white border rounded-xl p-4 mb-5 shadow-sm grid grid-cols-2 gap-3">
-          {[["kode","Kode","text"],["nama","Nama Item","text"],["satuan","Satuan","text"],["stok","Stok Awal","number"],["hargaBeli","Harga Beli","number"],["hargaJual","Harga Jual","number"],["minimum","Stok Min","number"]].map(([k,l,t])=>(<div key={k}><label className="text-xs text-gray-500">{l}</label><input type={t} className="w-full border rounded p-2 text-sm mt-1" value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))}/></div>))}
-          <div><label className="text-xs text-gray-500">Kategori</label><select className="w-full border rounded p-2 text-sm mt-1" value={form.kategori} onChange={e=>{const k=e.target.value;setForm(f=>({...f,kategori:k,kode:genSKU(k)}))}}><option>Bahan Baku</option><option>Barang Jadi</option><option>Spare Part</option><option>WIP</option></select></div>
-          <div className="col-span-2 flex gap-2"><button onClick={save} className="bg-blue-700 text-white px-4 py-2 rounded text-sm">Simpan</button><button onClick={()=>setShow(false)} className="text-gray-500 px-3 py-2 text-sm border rounded">Batal</button></div>
-        </div>
-      )}
-      <div className="space-y-3">
-        {inventory.map((i,idx)=>(
-          <div key={i.id} className={`bg-white rounded-xl border shadow-sm p-4 ${i.stok<=i.minimum?"border-red-200 bg-red-50":""}`}>
-            <div className="flex justify-between items-start mb-2">
-              <div><div className="text-xs text-gray-400 mb-0.5">#{idx+1} · {i.kode}</div><div className="font-semibold text-gray-800">{i.nama}</div></div>
-              <div className="flex gap-1"><span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">{i.kategori}</span>{i.stok<=i.minimum&&<span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-xs">Min</span>}</div>
-            </div>
-            <div className="grid grid-cols-4 gap-2 text-xs text-gray-500 mb-3">
-              <div><div>Stok</div><div className={`font-bold text-sm ${i.stok<=i.minimum?"text-red-600":"text-gray-800"}`}>{i.stok} {i.satuan}</div></div>
-              <div><div>Min</div><div className="font-medium">{i.minimum}</div></div>
-              <div><div>H.Beli</div><div className="font-medium">{fmt(i.hargaBeli)}</div></div>
-              <div><div>H.Jual</div><div className="font-medium text-green-600">{i.hargaJual?fmt(i.hargaJual):"—"}</div></div>
-            </div>
-            <button onClick={()=>setAdj(i)} className="w-full border border-blue-600 text-blue-600 py-2 rounded-lg text-sm">Penyesuaian Stok</button>
-          </div>
-        ))}
-      </div>
+      {right}
     </div>
   );
 }
 
-// ─── COA ─────────────────────────────────────────────────────
-function COA({accounts,setAccounts}){
-  const [form,setForm]=useState({kode:"",nama:"",kategori:"Aset",subKategori:"Kas & Setara Kas"});
-  const [editId,setEditId]=useState(null);const [search,setSearch]=useState("");
-  const KATEGORI=["Aset","Kewajiban","Ekuitas","Pendapatan","Beban"];
-  const SUB={Aset:["Kas & Setara Kas","Piutang","Persediaan","Aset Tetap","Aset Lainnya"],Kewajiban:["Hutang Jangka Pendek","Hutang Jangka Panjang"],Ekuitas:["Modal","Laba Ditahan"],Pendapatan:["Pendapatan Usaha","Pendapatan Lain-lain"],Beban:["Beban Pokok","Beban Operasional","Beban Lain-lain"]};
-  const KCOLORS={Aset:"bg-blue-100 text-blue-700",Kewajiban:"bg-red-100 text-red-700",Ekuitas:"bg-purple-100 text-purple-700",Pendapatan:"bg-green-100 text-green-700",Beban:"bg-orange-100 text-orange-700"};
-  const SCOLORS={"Kas & Setara Kas":"bg-emerald-100 text-emerald-700","Piutang":"bg-sky-100 text-sky-700","Persediaan":"bg-amber-100 text-amber-700","Aset Tetap":"bg-indigo-100 text-indigo-700"};
-  const filtered=accounts.filter(a=>a.kode.includes(search)||a.nama.toLowerCase().includes(search.toLowerCase()));
-  const save=()=>{if(!form.kode||!form.nama)return;if(editId){setAccounts(a=>a.map(ac=>ac.kode===editId?{...form}:ac));setEditId(null);}else{if(accounts.find(a=>a.kode===form.kode)){alert("Kode sudah ada!");return;}setAccounts(a=>[...a,{...form}]);}setForm({kode:"",nama:"",kategori:"Aset",subKategori:"Kas & Setara Kas"});};
-  const grouped=KATEGORI.map(kat=>{const ki=filtered.filter(a=>a.kategori===kat);const subs=[...new Set(ki.map(a=>a.subKategori||"Lainnya"))];return{kategori:kat,subs:subs.map(sub=>({sub,items:ki.filter(a=>(a.subKategori||"Lainnya")===sub)}))};}).filter(g=>g.subs.some(s=>s.items.length>0));
-  return(
+function Field({ label, children }) {
+  return (
     <div>
-      <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-bold text-gray-700">Chart of Accounts</h2><div className="text-sm text-gray-400">{accounts.length} akun</div></div>
-      <div className="bg-white border rounded-xl p-4 mb-4 shadow-sm">
-        <div className="font-semibold text-gray-600 mb-3 text-sm">{editId?"Edit":"Tambah"} Akun</div>
-        <div className="grid grid-cols-2 gap-3">
-          <div><label className="text-xs text-gray-500">Kode</label><input className="w-full border rounded p-2 text-sm mt-1" value={form.kode} disabled={!!editId} onChange={e=>setForm(f=>({...f,kode:e.target.value}))}/></div>
-          <div><label className="text-xs text-gray-500">Nama Akun</label><input className="w-full border rounded p-2 text-sm mt-1" value={form.nama} onChange={e=>setForm(f=>({...f,nama:e.target.value}))}/></div>
-          <div><label className="text-xs text-gray-500">Kategori</label><select className="w-full border rounded p-2 text-sm mt-1" value={form.kategori} onChange={e=>setForm(f=>({...f,kategori:e.target.value,subKategori:SUB[e.target.value][0]}))}>{KATEGORI.map(k=><option key={k}>{k}</option>)}</select></div>
-          <div><label className="text-xs text-gray-500">Sub Kategori</label><select className="w-full border rounded p-2 text-sm mt-1" value={form.subKategori} onChange={e=>setForm(f=>({...f,subKategori:e.target.value}))}>{(SUB[form.kategori]||[]).map(s=><option key={s}>{s}</option>)}</select></div>
-        </div>
-        <div className="flex gap-2 mt-3"><button onClick={save} className="bg-blue-700 text-white px-4 py-2 rounded text-sm">{editId?"Update":"Tambah"}</button>{editId&&<button onClick={()=>{setForm({kode:"",nama:"",kategori:"Aset",subKategori:"Kas & Setara Kas"});setEditId(null);}} className="text-gray-500 px-3 py-1.5 text-sm border rounded">Batal</button>}</div>
-      </div>
-      <input className="w-full border rounded-lg p-2.5 text-sm mb-3 bg-white" placeholder="Cari akun..." value={search} onChange={e=>setSearch(e.target.value)}/>
-      {grouped.map(g=>(
-        <div key={g.kategori} className="mb-4">
-          <div className="flex items-center gap-2 mb-2"><span className={`px-2 py-0.5 rounded text-xs font-bold ${KCOLORS[g.kategori]}`}>{g.kategori}</span></div>
-          {g.subs.filter(s=>s.items.length>0).map(({sub,items})=>(
-            <div key={sub} className="bg-white rounded-xl shadow-sm border mb-2 overflow-hidden">
-              <div className="px-4 py-2 bg-gray-50 border-b flex items-center gap-2"><span className={`px-2 py-0.5 rounded text-xs font-medium ${SCOLORS[sub]||"bg-gray-100 text-gray-600"}`}>{sub}</span><span className="text-gray-400 text-xs">{items.length} akun</span>{sub==="Kas & Setara Kas"&&<span className="text-xs text-emerald-600 ml-auto">pilihan bayar</span>}</div>
-              {items.sort((a,b)=>a.kode.localeCompare(b.kode)).map(ac=>(
-                <div key={ac.kode} className="flex items-center justify-between p-3 border-b last:border-0">
-                  <div><div className="font-mono text-blue-700 text-sm">{ac.kode}</div><div className="text-sm">{ac.nama}</div></div>
-                  <div className="flex gap-3"><button onClick={()=>{setForm({...ac});setEditId(ac.kode);}} className="text-blue-600 text-xs">Edit</button><button onClick={()=>setAccounts(a=>a.filter(x=>x.kode!==ac.kode))} className="text-red-400 text-xs">Hapus</button></div>
-                </div>
-              ))}
-            </div>
-          ))}
+      {label && <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:4}}>{label}</div>}
+      {children}
+    </div>
+  );
+}
+
+const inputStyle = {width:"100%",padding:"8px 11px",border:"1.5px solid #e2e8f0",borderRadius:9,fontSize:13,fontFamily:"inherit",color:"#1e293b",background:"#fff",outline:"none",boxSizing:"border-box"};
+
+function Inp({ label, ...props }) {
+  return <Field label={label}><input style={inputStyle} {...props}/></Field>;
+}
+
+function Sel({ label, children, ...props }) {
+  return <Field label={label}><select style={inputStyle} {...props}>{children}</select></Field>;
+}
+
+function DataTable({ heads, rows, empty="Tidak ada data" }) {
+  return (
+    <div style={{overflowX:"auto"}}>
+      <table style={{width:"100%",borderCollapse:"collapse",minWidth:400}}>
+        <thead>
+          <tr style={{background:"#f8fafc"}}>
+            {heads.map((h,i) => (
+              <th key={i} style={{padding:"9px 13px",textAlign:"left",fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,whiteSpace:"nowrap"}}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0
+            ? <tr><td colSpan={heads.length} style={{textAlign:"center",padding:40,color:"#94a3b8",fontSize:13}}>{empty}</td></tr>
+            : rows.map((r,i) => (
+              <tr key={i} style={{borderTop:"1px solid #f8fafc"}}>
+                {r.map((c,j) => <td key={j} style={{padding:"10px 13px",fontSize:13,color:"#1e293b"}}>{c}</td>)}
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Stats({ items }) {
+  return (
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${items.length},1fr)`,gap:10,marginBottom:18}}>
+      {items.map(s => (
+        <div key={s.label} style={{background:s.bg||"#eff6ff",borderRadius:12,padding:"13px 14px"}}>
+          <div style={{fontSize:10,fontWeight:700,color:s.color||"#6366f1",textTransform:"uppercase",letterSpacing:0.5}}>{s.label}</div>
+          <div style={{fontSize:15,fontWeight:800,color:"#1e293b",marginTop:3}}>{s.value}</div>
+          {s.sub && <div style={{fontSize:11,color:"#94a3b8",marginTop:1}}>{s.sub}</div>}
         </div>
       ))}
     </div>
   );
 }
 
-// ─── LAPORAN ─────────────────────────────────────────────────
-function Laporan({accounts,getBalance,labaRugi,inventory,journals}){
-  const [view,setView]=useState("laba");
-  const [periodeStart,setPeriodeStart]=useState("2025-01-01");
-  const [periodeEnd,setPeriodeEnd]=useState(today());
-  const [filterKat,setFilterKat]=useState("Semua");
-  const byKat=(kat)=>accounts.filter(a=>a.kategori===kat);
-  const sum=(kat)=>byKat(kat).reduce((s,a)=>s+getBalance(a.kode,a.kategori),0);
-  const totalAset=sum("Aset"),totalKewajiban=sum("Kewajiban"),totalEkuitas=sum("Ekuitas");
-  const totalP=sum("Pendapatan"),totalB=sum("Beban");
-  const totalKE=totalKewajiban+totalEkuitas+labaRugi;
-  const balanced=Math.abs(totalAset-totalKE)<1;
-  const katList=["Semua",...new Set(inventory.map(i=>i.kategori))];
-  const filteredInv=inventory.filter(i=>filterKat==="Semua"||i.kategori===filterKat);
-  const totalNilaiBeli=filteredInv.reduce((s,i)=>s+i.stok*i.hargaBeli,0);
-  const totalNilaiJual=filteredInv.reduce((s,i)=>s+i.stok*(i.hargaJual||0),0);
-  return(
-    <div>
-      <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-        {[["laba","Laba Rugi"],["neraca","Neraca"],["persediaan","Persediaan"]].map(([v,l])=>(<button key={v} onClick={()=>setView(v)} className={`px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap ${view===v?"bg-blue-700 text-white":"bg-white border text-gray-600"}`}>{l}</button>))}
+function Modal({ open, onClose, title, children, width=480 }) {
+  if (!open) return null;
+  return (
+    <div onClick={e => { if(e.target===e.currentTarget) onClose(); }} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.55)",backdropFilter:"blur(6px)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#fff",borderRadius:18,width:"100%",maxWidth:width,maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+        <div style={{padding:"15px 20px",borderBottom:"1px solid #f1f5f9",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontWeight:800,fontSize:15,color:"#1e293b"}}>{title}</div>
+          <button onClick={onClose} style={{width:30,height:30,borderRadius:8,border:"none",background:"#f1f5f9",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:"#64748b"}}><Ic n="x" s={13}/></button>
+        </div>
+        <div style={{overflow:"auto",flex:1,padding:18}}>{children}</div>
       </div>
-      {view==="laba"&&(<div className="bg-white rounded-xl shadow-sm border p-5"><h3 className="font-bold text-gray-700 mb-1">Laporan Laba Rugi</h3><p className="text-xs text-gray-400 mb-4">Periode berjalan</p>{["Pendapatan","Beban"].map(kat=>(<div key={kat} className="mb-4"><div className="font-semibold text-gray-600 mb-2 text-sm">{kat}</div>{byKat(kat).map(a=><div key={a.kode} className="flex justify-between text-sm py-1"><span className="text-gray-500">{a.nama}</span><span className={kat==="Beban"?"text-red-600":""}>{kat==="Beban"?`(${fmt(getBalance(a.kode,a.kategori))})`:fmt(getBalance(a.kode,a.kategori))}</span></div>)}<div className={`flex justify-between font-semibold border-t pt-2 mt-1 text-sm ${kat==="Beban"?"text-red-600":"text-blue-700"}`}><span>Total {kat}</span><span>{kat==="Beban"?`(${fmt(totalB)})`:fmt(totalP)}</span></div></div>))}<div className={`flex justify-between font-bold text-base border-t-2 pt-3 ${labaRugi>=0?"text-green-700":"text-red-700"}`}><span>{labaRugi>=0?"Laba Bersih":"Rugi Bersih"}</span><span>{fmt(Math.abs(labaRugi))}</span></div></div>)}
-      {view==="neraca"&&(<div><div className={`rounded-lg p-3 mb-4 text-sm ${balanced?"bg-green-50 border border-green-200 text-green-700":"bg-red-50 border border-red-200 text-red-600"}`}>{balanced?"✓ Neraca balance":"Neraca tidak balance"}</div><div className="grid grid-cols-1 gap-4"><div className="bg-white rounded-xl shadow-sm border p-5"><h3 className="font-bold text-gray-700 mb-3 text-sm">Aset</h3>{byKat("Aset").map(a=><div key={a.kode} className="flex justify-between text-sm py-1"><span className="text-gray-500">{a.nama}</span><span>{fmt(getBalance(a.kode,a.kategori))}</span></div>)}<div className="flex justify-between font-bold border-t pt-2 mt-2 text-blue-700 text-sm"><span>Total Aset</span><span>{fmt(totalAset)}</span></div></div><div className="bg-white rounded-xl shadow-sm border p-5"><h3 className="font-bold text-gray-700 mb-3 text-sm">Kewajiban & Ekuitas</h3><div className="text-xs font-semibold text-gray-400 mb-1">KEWAJIBAN</div>{byKat("Kewajiban").map(a=><div key={a.kode} className="flex justify-between text-sm py-1"><span className="text-gray-500">{a.nama}</span><span>{fmt(getBalance(a.kode,a.kategori))}</span></div>)}<div className="text-xs font-semibold text-gray-400 mb-1 mt-3">EKUITAS</div>{byKat("Ekuitas").map(a=><div key={a.kode} className="flex justify-between text-sm py-1"><span className="text-gray-500">{a.nama}</span><span>{fmt(getBalance(a.kode,a.kategori))}</span></div>)}<div className="flex justify-between text-sm py-1"><span className="text-gray-500">Laba Ditahan</span><span className={labaRugi>=0?"text-green-600":"text-red-600"}>{fmt(labaRugi)}</span></div><div className="flex justify-between font-bold border-t pt-2 mt-2 text-blue-700 text-sm"><span>Total K + E</span><span>{fmt(totalKE)}</span></div></div></div></div>)}
-      {view==="persediaan"&&(<div><div className="bg-white border rounded-xl p-4 mb-4 flex flex-wrap gap-3"><div><label className="text-xs text-gray-500">Dari</label><input type="date" className="block border rounded p-2 text-sm mt-1" value={periodeStart} onChange={e=>setPeriodeStart(e.target.value)}/></div><div><label className="text-xs text-gray-500">Sampai</label><input type="date" className="block border rounded p-2 text-sm mt-1" value={periodeEnd} onChange={e=>setPeriodeEnd(e.target.value)}/></div><div><label className="text-xs text-gray-500">Kategori</label><select className="block border rounded p-2 text-sm mt-1" value={filterKat} onChange={e=>setFilterKat(e.target.value)}>{katList.map(k=><option key={k}>{k}</option>)}</select></div></div><div className="grid grid-cols-3 gap-3 mb-4"><div className="bg-blue-600 text-white rounded-xl p-3"><div className="text-xs opacity-75">Nilai Beli</div><div className="font-bold text-sm mt-1">{fmt(totalNilaiBeli)}</div></div><div className="bg-green-600 text-white rounded-xl p-3"><div className="text-xs opacity-75">Nilai Jual</div><div className="font-bold text-sm mt-1">{fmt(totalNilaiJual)}</div></div><div className="bg-purple-600 text-white rounded-xl p-3"><div className="text-xs opacity-75">Margin</div><div className="font-bold text-sm mt-1">{fmt(totalNilaiJual-totalNilaiBeli)}</div></div></div><div className="space-y-3">{filteredInv.map((i,idx)=>{const margin=(i.hargaJual||0)-i.hargaBeli;const pct=i.hargaBeli>0?((margin/i.hargaBeli)*100).toFixed(1):0;return(<div key={i.id} className="bg-white rounded-xl border shadow-sm p-4"><div className="flex justify-between items-start mb-2"><div><div className="text-xs text-gray-400 mb-0.5">#{idx+1} · {i.kode}</div><div className="font-semibold text-gray-800">{i.nama}</div></div><span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">{i.kategori}</span></div><div className="grid grid-cols-2 gap-2 text-xs"><div className="bg-gray-50 rounded p-2"><div className="text-gray-400">Stok</div><div className="font-bold">{i.stok} {i.satuan}</div></div><div className="bg-gray-50 rounded p-2"><div className="text-gray-400">Margin/unit</div><div className={`font-medium ${margin>=0?"text-green-600":"text-red-600"}`}>{fmt(margin)} ({pct}%)</div></div><div className="bg-gray-50 rounded p-2"><div className="text-gray-400">H.Beli</div><div className="font-medium">{fmt(i.hargaBeli)}</div></div><div className="bg-gray-50 rounded p-2"><div className="text-gray-400">H.Jual</div><div className="font-medium text-green-600">{i.hargaJual?fmt(i.hargaJual):"—"}</div></div></div></div>);})}</div></div>)}
     </div>
   );
 }
 
-// ─── MASTER DATA ─────────────────────────────────────────────
-function MasterData({customers,setCustomers,suppliers,setSuppliers}){
-  const [view,setView]=useState("customer");const [showForm,setShowForm]=useState(false);const [editId,setEditId]=useState(null);const [showCSVModal,setShowCSVModal]=useState(false);
-  const genKodeC=()=>{const nums=customers.map(c=>parseInt((c.kode||"").replace(/\D/g,""))).filter(Boolean);const next=nums.length?Math.max(...nums)+1:1;return "CUST-"+String(next).padStart(3,"0");};
-  const genKodeS=()=>{const nums=suppliers.map(s=>parseInt((s.kode||"").replace(/\D/g,""))).filter(Boolean);const next=nums.length?Math.max(...nums)+1:1;return "SUPP-"+String(next).padStart(3,"0");};
-  const emptyC={kode:"",nama:"",kontak:"",telp:"",email:"",alamat:"",npwp:"",limit:""};
-  const emptyS={kode:"",nama:"",kontak:"",telp:"",email:"",alamat:"",npwp:"",termin:""};
-  const [form,setForm]=useState(emptyC);
-  const isC=view==="customer";const data=isC?customers:suppliers;const setData=isC?setCustomers:setSuppliers;
-  const switchView=(v)=>{setView(v);setShowForm(false);setEditId(null);setForm(v==="customer"?emptyC:emptyS);};
-  const save=async()=>{if(!form.nama)return;const p={...form,limit:Number(form.limit)||0,termin:Number(form.termin)||0};if(editId){const upd={...p,id:editId};await (isC?db.updateCustomer:db.updateSupplier)(editId,upd).catch(console.error);setData(d=>d.map(x=>x.id===editId?upd:x));setEditId(null);}else{const nd={...p,id:Date.now()};await (isC?db.addCustomer:db.addSupplier)(nd).catch(console.error);setData(d=>[...d,nd]);}setForm(isC?emptyC:emptyS);setShowForm(false);};
-  const fields=isC?[["kode","Kode"],["nama","Nama"],["kontak","Kontak"],["telp","Telp"],["email","Email"],["alamat","Alamat"],["npwp","NPWP"],["limit","Credit Limit"]]:[["kode","Kode"],["nama","Nama"],["kontak","Kontak"],["telp","Telp"],["email","Email"],["alamat","Alamat"],["npwp","NPWP"],["termin","Termin (hari)"]];
-  return(
-    <div>
-      <div className="flex justify-between items-center mb-4"><h2 className="text-lg font-bold text-gray-700">Master Data</h2><div className="flex gap-2"><button onClick={()=>setShowCSVModal(true)} className="bg-green-100 text-green-700 border border-green-300 px-3 py-2 rounded-lg text-xs">CSV</button><button onClick={()=>{setShowForm(true);setEditId(null);setForm(isC?{...emptyC,kode:genKodeC()}:{...emptyS,kode:genKodeS()});}} className="bg-blue-700 text-white px-3 py-2 rounded-lg text-sm">+ Tambah</button></div></div>
-      <div className="flex gap-2 mb-4">{[["customer","Customer"],["supplier","Supplier"]].map(([v,l])=><button key={v} onClick={()=>switchView(v)} className={`px-4 py-2 rounded-lg text-sm font-medium ${view===v?"bg-blue-700 text-white":"bg-white border text-gray-600"}`}>{l}</button>)}<span className="ml-auto text-sm text-gray-400 self-center">{data.length} data</span></div>
-      {showForm&&(<div className="bg-white border rounded-xl p-4 mb-4 shadow-sm"><div className="font-semibold text-gray-600 mb-3 text-sm">{editId?"Edit":"Tambah"} {isC?"Customer":"Supplier"}</div><div className="grid grid-cols-2 gap-3">{fields.map(([k,l])=><div key={k}><label className="text-xs text-gray-500">{l}</label><input className="w-full border rounded p-2 text-sm mt-1" value={form[k]||""} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))}/></div>)}</div><div className="flex gap-2 mt-4"><button onClick={save} className="bg-blue-700 text-white px-4 py-2 rounded text-sm">{editId?"Update":"Simpan"}</button><button onClick={()=>{setShowForm(false);setEditId(null);}} className="text-gray-500 px-3 py-2 text-sm border rounded">Batal</button></div></div>)}
-      <div className="space-y-3">
-        {data.map((item,idx)=>(
-          <div key={item.id} className="bg-white rounded-xl border shadow-sm p-4">
-            <div className="flex justify-between items-start mb-2">
-              <div><div className="text-xs text-gray-400 mb-0.5">#{idx+1} · {item.kode}</div><div className="font-semibold text-gray-800">{item.nama}</div></div>
-              <div className="flex gap-2"><button onClick={()=>{setForm({...item});setEditId(item.id);setShowForm(true);}} className="text-blue-600 text-xs border border-blue-200 px-2 py-1 rounded">Edit</button><button onClick={()=>setData(d=>d.filter(x=>x.id!==item.id))} className="text-red-400 text-xs border border-red-200 px-2 py-1 rounded">Hapus</button></div>
-            </div>
-            <div className="grid grid-cols-2 gap-1 text-xs text-gray-500">
-              <div>{item.kontak}</div><div>{item.telp}</div>
-              <div className="col-span-2">{item.email}</div>
-              <div className="col-span-2">{item.alamat}</div>
-              <div>{isC?`Limit: ${fmt(item.limit||0)}`:`Termin: ${item.termin} hari`}</div>
-            </div>
+function Toast({ toast }) {
+  if (!toast) return null;
+  const colors = { success:"#16a34a", error:"#dc2626", info:"#6366f1" };
+  return (
+    <div style={{position:"fixed",bottom:20,right:20,background:colors[toast.type]||"#1e293b",color:"#fff",padding:"10px 16px",borderRadius:12,fontSize:13,fontWeight:600,zIndex:999,boxShadow:"0 8px 24px rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:7}}>
+      <Ic n="check" s={13}/> {toast.msg}
+    </div>
+  );
+}
+
+// ─── BAYAR MODAL (shared) ─────────────────────────────────────
+function BayarModal({ open, onClose, item, tipeBank, bank, onSave, label }) {
+  const [txnId, setTxnId] = useState("");
+  const [jumlah, setJumlah] = useState("");
+
+  if (!open || !item) return null;
+  const sisa = item.total - item.dibayar;
+  const opts = bank.filter(b => b.tipe === tipeBank);
+
+  const handleTxn = e => {
+    const t = bank.find(b => b.id === e.target.value);
+    setTxnId(e.target.value);
+    if (t) setJumlah(String(t.jumlah));
+  };
+
+  const submit = () => {
+    if (!txnId) return alert("Pilih ID Transaksi Bank!");
+    const j = parseFloat(jumlah) || 0;
+    if (j <= 0) return alert("Jumlah harus lebih dari 0!");
+    onSave(txnId, Math.min(j, sisa));
+    onClose();
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} title={"Catat Pembayaran — " + item.id} width={440}>
+      <div style={{background:"#f8fafc",borderRadius:10,padding:12,marginBottom:14}}>
+        <div style={{fontWeight:800,color:"#6366f1",marginBottom:4}}>{item.id}</div>
+        {[["Total",fmt(item.total)],["Terbayar",fmt(item.dibayar)],["Sisa",fmt(sisa)]].map(([l,v]) => (
+          <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"3px 0"}}>
+            <span style={{color:"#64748b"}}>{l}</span><span style={{fontWeight:700}}>{v}</span>
           </div>
         ))}
-        {data.length===0&&<div className="text-center text-gray-400 py-8">Belum ada data</div>}
       </div>
-    </div>
+      <div style={{marginBottom:12}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",marginBottom:5}}>ID Transaksi Bank {tipeBank === "masuk" ? "Masuk" : "Keluar"}</div>
+        <select value={txnId} onChange={handleTxn} style={inputStyle}>
+          <option value="">-- Pilih ID Transaksi --</option>
+          {opts.map(b => <option key={b.id} value={b.id}>{b.id} — {b.ket.slice(0,28)} — {fmt(b.jumlah)}</option>)}
+        </select>
+        {opts.length === 0 && <div style={{fontSize:11,color:"#dc2626",marginTop:4}}>Belum ada mutasi {tipeBank} di buku bank</div>}
+      </div>
+      <div style={{marginBottom:14}}>
+        <Inp label="Jumlah Bayar" type="number" value={jumlah} onChange={e => setJumlah(e.target.value)}/>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <Btn onClick={submit}><Ic n="check" s={13}/> Konfirmasi</Btn>
+        <Btn variant="ghost" onClick={onClose}>Batal</Btn>
+      </div>
+    </Modal>
   );
 }
 
-// ─── INVOICE ─────────────────────────────────────────────────
-function InvoicePreview({invoice,template,company}){
-  const printPDF=()=>{
-    const win=window.open("","_blank");
-    win.document.write(`<html><head><title>Invoice ${invoice.invoice}</title><style>body{font-family:Arial,sans-serif;margin:0;padding:20px;color:#1f2937}.hdr{background:${template.primaryColor};color:white;padding:24px;border-radius:8px 8px 0 0}.bdy{padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px}table{width:100%;border-collapse:collapse;margin:16px 0}thead tr{background:${template.accent}}th{padding:10px;text-align:left;font-size:12px;color:${template.primaryColor}}td{padding:10px;font-size:13px;border-bottom:1px solid #f3f4f6}.tot{background:${template.primaryColor};color:white}.ftr{margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:12px;color:#6b7280;text-align:center}</style></head><body><div class="hdr"><h2 style="margin:0">${company.nama}</h2><p style="margin:4px 0;font-size:12px">${company.alamat}</p></div><div class="bdy"><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"><div><div style="font-size:11px;color:#6b7280">KEPADA</div><div style="font-size:16px;font-weight:700">${invoice.pelanggan}</div></div><div style="text-align:right"><div style="font-size:11px;color:#6b7280">NO. INVOICE</div><div style="font-size:16px;color:${template.primaryColor};font-weight:700">${invoice.invoice}</div><div style="font-size:11px;color:#6b7280;margin-top:8px">TANGGAL</div><div>${fmtDate(invoice.tanggal)}</div><div style="font-size:11px;color:#6b7280;margin-top:8px">JATUH TEMPO</div><div style="color:#dc2626">${fmtDate(invoice.jatuhTempo)}</div></div></div><table><thead><tr><th>#</th><th>Nama Barang</th><th>Qty</th><th style="text-align:right">Harga</th><th style="text-align:right">Subtotal</th></tr></thead><tbody>${(invoice.items||[]).map((it,i)=>`<tr><td>${i+1}</td><td>${it.nama}</td><td>${it.qty}</td><td style="text-align:right">${fmt(it.harga)}</td><td style="text-align:right">${fmt(it.subtotal)}</td></tr>`).join("")}<tr class="tot"><td colspan="4" style="text-align:right;font-weight:bold;padding-right:10px">TOTAL</td><td style="font-weight:bold">${fmt(invoice.jumlah)}</td></tr></tbody></table>${invoice.catatan?`<div style="background:#f9fafb;padding:12px;border-radius:6px;font-size:13px"><strong>Catatan:</strong> ${invoice.catatan}</div>`:""}<div class="ftr">${template.footerText}</div></div></body></html>`);
-    win.document.close();setTimeout(()=>win.print(),500);
-  };
-  return(
-    <div>
-      <div className="bg-white rounded-xl overflow-hidden shadow border">
-        <div className="p-5 text-white" style={{background:template.primaryColor}}>
-          <div className="flex justify-between items-start">
-            <div><div className="font-bold text-lg">{company.nama}</div><div className="text-xs opacity-80">{company.alamat}</div></div>
-            <div className="text-right"><div className="text-xs opacity-40 font-black tracking-widest">INVOICE</div><div className="font-bold">{invoice.invoice}</div></div>
-          </div>
-        </div>
-        <div className="p-5">
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div><div className="text-xs text-gray-400 uppercase mb-1">Kepada</div><div className="font-bold">{invoice.pelanggan}</div></div>
-            <div className="text-right"><div className="text-xs text-gray-400">Tgl: {fmtDate(invoice.tanggal)}</div><div className="text-xs text-red-600 mt-1">JT: {fmtDate(invoice.jatuhTempo)}</div></div>
-          </div>
-          <table className="w-full text-sm mb-4">
-            <thead><tr className="text-xs font-semibold" style={{background:template.accent,color:template.primaryColor}}><th className="p-2 text-left">#</th><th className="p-2 text-left">Barang</th><th className="p-2 text-center">Qty</th><th className="p-2 text-right">Harga</th><th className="p-2 text-right">Subtotal</th></tr></thead>
-            <tbody>
-              {(invoice.items||[]).map((it,i)=><tr key={i} className="border-b"><td className="p-2 text-gray-400">{i+1}</td><td className="p-2">{it.nama}</td><td className="p-2 text-center">{it.qty}</td><td className="p-2 text-right">{fmt(it.harga)}</td><td className="p-2 text-right font-medium">{fmt(it.subtotal)}</td></tr>)}
-              <tr style={{background:template.primaryColor}} className="text-white font-bold"><td colSpan={4} className="p-3 text-right">TOTAL</td><td className="p-3 text-right">{fmt(invoice.jumlah)}</td></tr>
-            </tbody>
-          </table>
-          {invoice.catatan&&<div className="bg-gray-50 rounded p-3 text-sm text-gray-600 mb-4"><strong>Catatan:</strong> {invoice.catatan}</div>}
-          {template.showSignature&&<div className="grid grid-cols-2 gap-8 mt-6"><div className="text-center"><div className="border-t mt-10 pt-2 text-xs text-gray-500">Pelanggan<br/>{invoice.pelanggan}</div></div><div className="text-center"><div className="border-t mt-10 pt-2 text-xs text-gray-500">Hormat Kami<br/>{company.nama}</div></div></div>}
-          <div className="text-center text-xs text-gray-400 mt-4 pt-4 border-t">{template.footerText}</div>
-        </div>
-      </div>
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4 text-xs text-blue-700">Setelah klik Print, pilih Save as PDF di dialog print browser.</div>
-      <button onClick={printPDF} className="w-full mt-3 bg-blue-700 text-white py-3 rounded-xl font-medium">Print / Download PDF</button>
-    </div>
-  );
-}
+// ─── MODULE: DASHBOARD ────────────────────────────────────────
+function Dashboard({ piutang, hutang, bank, jobOrders, produk, customers }) {
+  const saldoBank   = bank.length > 0 ? bank[bank.length-1].saldo : 0;
+  const outstanding = piutang.reduce((s,p) => s+(p.total-p.dibayar),0);
+  const outHutang   = hutang.reduce((s,h) => s+(h.total-h.dibayar),0);
+  const joAktif     = jobOrders.filter(j => j.status==="In Progress").length;
 
-function InvoiceModule({ar,templates,setTemplates,company,setCompany,printTarget}){
-  const [view,setView]=useState(printTarget?"preview":"list");
-  const [selectedAR,setSelectedAR]=useState(printTarget||null);
-  const [selTpl,setSelTpl]=useState(templates[0]);
-  const [editTpl,setEditTpl]=useState(null);
-  const logoRef=useRef();
-  const saveTpl=()=>{setTemplates(ts=>ts.find(t=>t.id===editTpl.id)?ts.map(t=>t.id===editTpl.id?editTpl:t):[...ts,{...editTpl,id:Date.now()}]);setEditTpl(null);setView("template");};
-  const handleLogo=(e)=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setEditTpl(t=>({...t,logo:ev.target.result}));r.readAsDataURL(f);};
-  return(
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-bold text-gray-700">Invoice</h2>
-        <div className="flex gap-2">{[["list","Daftar"],["template","Template"],["company","Perusahaan"]].map(([v,l])=><button key={v} onClick={()=>setView(v)} className={`px-3 py-2 rounded-lg text-sm ${view===v?"bg-blue-700 text-white":"bg-white border text-gray-600"}`}>{l}</button>)}</div>
-      </div>
-      {view==="list"&&(<div><div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 flex items-center gap-2 flex-wrap"><span className="text-sm text-blue-700">Template:</span>{templates.map(t=><button key={t.id} onClick={()=>setSelTpl(t)} className="px-3 py-1 rounded-full text-xs border" style={selTpl.id===t.id?{background:t.primaryColor,color:"white",border:"none"}:{}}>{t.nama}</button>)}</div><div className="space-y-3">{ar.map((r,idx)=>(<div key={r.id} className="bg-white rounded-xl border shadow-sm p-4"><div className="flex justify-between items-start mb-2"><div><div className="text-xs text-gray-400 mb-0.5">#{idx+1} · {r.invoice}</div><div className="font-semibold text-gray-800">{r.pelanggan}</div></div><span className={`px-2 py-1 rounded-full text-xs ${r.status==="Lunas"?"bg-green-100 text-green-700":r.status==="Sebagian"?"bg-yellow-100 text-yellow-700":"bg-red-100 text-red-700"}`}>{r.status}</span></div><div className="text-sm text-gray-600 mb-3">Total: <span className="font-medium">{fmt(r.jumlah)}</span></div><button onClick={()=>{setSelectedAR(r);setView("preview");}} className="w-full bg-blue-700 text-white py-2 rounded-lg text-sm font-medium">Print Invoice</button></div>))}</div></div>)}
-      {view==="preview"&&selectedAR&&(<div><button onClick={()=>setView("list")} className="text-blue-600 text-sm mb-4 hover:underline">← Kembali</button><div className="flex gap-2 mb-4 overflow-x-auto pb-1">{templates.map(t=><button key={t.id} onClick={()=>setSelTpl(t)} className="px-3 py-1.5 rounded-full text-xs border whitespace-nowrap" style={selTpl.id===t.id?{background:t.primaryColor,color:"white",border:"none"}:{}}>{t.nama}</button>)}</div><InvoicePreview invoice={selectedAR} template={selTpl} company={company}/></div>)}
-      {view==="template"&&!editTpl&&(<div className="space-y-3">{templates.map(t=>(<div key={t.id} className="bg-white rounded-xl border shadow-sm overflow-hidden"><div className="p-4 text-white" style={{background:t.primaryColor}}><div className="font-bold">{t.nama}</div></div><div className="p-4 flex gap-2"><button onClick={()=>setEditTpl({...t})} className="flex-1 border border-blue-600 text-blue-600 text-sm py-2 rounded">Edit</button><button onClick={()=>setSelTpl(t)} className={`flex-1 text-sm py-2 rounded ${selTpl.id===t.id?"bg-green-600 text-white":"border text-gray-600"}`}>{selTpl.id===t.id?"Aktif":"Pilih"}</button></div></div>))}<div className="bg-gray-50 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center p-8 cursor-pointer" onClick={()=>setEditTpl({id:null,nama:"Template Baru",layout:"standard",headerText:company.nama,footerText:"Terima kasih.",showSignature:true,showStamp:false,logo:"",primaryColor:"#1e40af",accent:"#dbeafe"})}><div className="text-center text-gray-400"><div className="text-3xl mb-1">+</div><div className="text-sm">Tambah Template</div></div></div></div>)}
-      {view==="template"&&editTpl&&(<div className="bg-white rounded-xl border shadow-sm p-5"><div className="font-bold text-gray-700 mb-4">Edit Template</div><div className="space-y-3"><div><label className="text-xs text-gray-500">Nama</label><input className="w-full border rounded p-2 text-sm mt-1" value={editTpl.nama} onChange={e=>setEditTpl(t=>({...t,nama:e.target.value}))}/></div><div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">Warna Utama</label><div className="flex gap-2 mt-1"><input type="color" className="h-9 w-12 border rounded" value={editTpl.primaryColor} onChange={e=>setEditTpl(t=>({...t,primaryColor:e.target.value}))}/><input className="flex-1 border rounded p-2 text-sm" value={editTpl.primaryColor} onChange={e=>setEditTpl(t=>({...t,primaryColor:e.target.value}))}/></div></div><div><label className="text-xs text-gray-500">Warna Aksen</label><div className="flex gap-2 mt-1"><input type="color" className="h-9 w-12 border rounded" value={editTpl.accent} onChange={e=>setEditTpl(t=>({...t,accent:e.target.value}))}/><input className="flex-1 border rounded p-2 text-sm" value={editTpl.accent} onChange={e=>setEditTpl(t=>({...t,accent:e.target.value}))}/></div></div></div><div><label className="text-xs text-gray-500">Footer</label><input className="w-full border rounded p-2 text-sm mt-1" value={editTpl.footerText} onChange={e=>setEditTpl(t=>({...t,footerText:e.target.value}))}/></div><div><label className="text-xs text-gray-500">Logo</label><div className="flex items-center gap-2 mt-1">{editTpl.logo&&<img src={editTpl.logo} alt="logo" className="h-8 border rounded"/>}<button onClick={()=>logoRef.current.click()} className="border px-3 py-1.5 rounded text-sm text-gray-600">Upload</button>{editTpl.logo&&<button onClick={()=>setEditTpl(t=>({...t,logo:""}))} className="text-red-400 text-sm">Hapus</button>}<input ref={logoRef} type="file" accept="image/*" className="hidden" onChange={handleLogo}/></div></div><label className="flex items-center gap-2 text-sm cursor-pointer"><input type="checkbox" checked={editTpl.showSignature} onChange={e=>setEditTpl(t=>({...t,showSignature:e.target.checked}))}/>Tanda Tangan</label></div><div className="flex gap-2 mt-4"><button onClick={saveTpl} className="bg-blue-700 text-white px-4 py-2 rounded text-sm">Simpan</button><button onClick={()=>setEditTpl(null)} className="border text-gray-600 px-4 py-2 rounded text-sm">Batal</button>{editTpl.id&&<button onClick={()=>{setTemplates(ts=>ts.filter(t=>t.id!==editTpl.id));setEditTpl(null);}} className="text-red-500 px-4 py-2 text-sm">Hapus</button>}</div></div>)}
-      {view==="company"&&(<div className="bg-white rounded-xl border shadow-sm p-5"><div className="font-bold text-gray-700 mb-4">Data Perusahaan</div><div className="space-y-3">{[["nama","Nama"],["alamat","Alamat"],["telp","Telepon"],["email","Email"],["npwp","NPWP"]].map(([k,l])=><div key={k}><label className="text-xs text-gray-500">{l}</label><input className="w-full border rounded p-2 text-sm mt-1" value={company[k]} onChange={e=>setCompany(c=>({...c,[k]:e.target.value}))}/></div>)}</div><div className="mt-3 text-xs text-green-600 bg-green-50 border border-green-200 rounded p-2">Tersimpan otomatis</div></div>)}
-    </div>
-  );
-}
-
-// ─── APP ─────────────────────────────────────────────────────
-export default function App() {
-  const [tab,setTab]=useState("Dashboard");
-  const [loading,setLoading]=useState(true);
-  const [user,setUser]=useState(null);
-  const [accounts,setAccounts]=useState([]);
-  const [journals,setJournals]=useState([]);
-  const [ar,setAr]=useState([]);
-  const [ap,setAp]=useState([]);
-  const [inventory,setInventory]=useState([]);
-  const [templates,setTemplates]=useState(initTemplates);
-  const [company,setCompany]=useState({nama:"",alamat:"",telp:"",email:"",npwp:""});
-  const [customers,setCustomers]=useState([]);
-  const [suppliers,setSuppliers]=useState([]);
-  const [csvModal,setCSVModal]=useState(null);
-  const [printTarget,setPrintTarget]=useState(null);
-  const [sidebarOpen,setSidebarOpen]=useState(false);
-  csvCb.set=setCSVModal;
-
-  useEffect(()=>{async function loadAll(){try{const[j,a,ap2,inv,acc,cust,supp,comp]=await Promise.all([db.getJournals(),db.getAR(),db.getAP(),db.getInventory(),db.getAccounts(),db.getCustomers(),db.getSuppliers(),db.getCompany()]);if(j&&j.length)setJournals(j);if(a&&a.length)setAr(a);if(ap2&&ap2.length)setAp(ap2);if(inv&&inv.length)setInventory(inv);if(acc&&acc.length)setAccounts(acc);if(cust&&cust.length)setCustomers(cust);if(supp&&supp.length)setSuppliers(supp);if(comp&&Object.keys(comp).length)setCompany(comp);}catch(e){console.error("Load error:",e);}finally{setLoading(false);}}loadAll();},[]);
-
-  const akunKas=accounts.filter(a=>a.subKategori==="Kas & Setara Kas");
-
-  const balances=useMemo(()=>{
-    const b={};
-    accounts.forEach(a=>b[a.kode]={debit:0,kredit:0});
-    journals.forEach(j=>j.entries.forEach(e=>{if(!b[e.akun])b[e.akun]={debit:0,kredit:0};if(e.posisi==="D")b[e.akun].debit+=e.nominal;else b[e.akun].kredit+=e.nominal;}));
-    return b;
-  },[journals,accounts]);
-
-  const getBalance=(kode,kategori)=>{const b=balances[kode]||{debit:0,kredit:0};return["Aset","Beban"].includes(kategori)?b.debit-b.kredit:b.kredit-b.debit;};
-  const labaRugi=accounts.filter(a=>a.kategori==="Pendapatan").reduce((s,a)=>s+getBalance(a.kode,a.kategori),0)-accounts.filter(a=>a.kategori==="Beban").reduce((s,a)=>s+getBalance(a.kode,a.kategori),0);
-  const totalAset=accounts.filter(a=>a.kategori==="Aset").reduce((s,a)=>s+getBalance(a.kode,a.kategori),0);
-  const totalPiutang=ar.reduce((s,r)=>s+(r.jumlah-r.dibayar),0);
-  const totalHutang=ap.reduce((s,r)=>s+(r.jumlah-r.dibayar),0);
-  const lowStock=inventory.filter(i=>i.stok<=i.minimum);
-  const handlePrint=(record)=>{setPrintTarget(record);setTab("Invoice");};
-
-  const currentTabMeta=NAV_GROUPS.flatMap(g=>g.tabs).find(t=>t.id===tab);
-  const currentGroup=NAV_GROUPS.find(g=>g.tabs.some(t=>t.id===tab));
-
-  if(!user)return <Login onLogin={setUser}/>;
-  if(loading)return(<div className="h-screen flex items-center justify-center bg-gray-100"><div className="text-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"/><div className="text-gray-500 text-sm">Memuat data...</div></div></div>);
   return (
-    <div className="h-screen bg-gray-100 font-sans flex overflow-hidden">
-      {csvModal&&<CSVOutputModal data={csvModal} onClose={()=>setCSVModal(null)}/>}
+    <div>
+      <div style={{marginBottom:18}}>
+        <div style={{fontWeight:800,fontSize:20,color:"#1e293b"}}>Dashboard</div>
+        <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>Ringkasan keuangan dan operasional</div>
+      </div>
 
-      <Sidebar tab={tab} setTab={setTab} company={company} isOpen={sidebarOpen} onClose={()=>setSidebarOpen(false)} user={user} onLogout={()=>setUser(null)}/>
+      <Stats items={[
+        { label:"Saldo Bank",     value:fmt(saldoBank),   bg:"#eff6ff", color:"#6366f1" },
+        { label:"Piutang",        value:fmt(outstanding),  bg:"#fef9c3", color:"#ca8a04" },
+        { label:"Hutang",         value:fmt(outHutang),    bg:"#fee2e2", color:"#dc2626" },
+        { label:"JO Aktif",       value:joAktif+" JO",     bg:"#dbeafe", color:"#2563eb" },
+      ]}/>
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <div className="bg-white border-b px-4 py-3 flex items-center gap-3 sticky top-0 z-30 flex-shrink-0">
-          <button onClick={()=>setSidebarOpen(o=>!o)} className="text-gray-500 hover:text-gray-800 p-1 rounded-lg hover:bg-gray-100 flex-shrink-0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        <Card>
+          <CardHeader title="Invoice Piutang Terbaru" icon="ar"/>
+          <DataTable
+            heads={["Invoice","Pelanggan","Total","Status"]}
+            rows={piutang.slice(0,5).map(p => [
+              <span style={{fontWeight:700,color:"#6366f1"}}>{p.id}</span>,
+              customers.find(c=>c.id===p.customerId)?.nama||"-",
+              <span style={{fontWeight:700}}>{fmt(p.total)}</span>,
+              <Badge s={p.status}/>
+            ])}
+          />
+        </Card>
+        <Card>
+          <CardHeader title="Mutasi Bank Terbaru" icon="bank"/>
+          <DataTable
+            heads={["ID","Keterangan","Jumlah","Tipe"]}
+            rows={[...bank].reverse().slice(0,5).map(b => [
+              <span style={{fontWeight:700,color:"#6366f1",fontSize:11}}>{b.id}</span>,
+              <span style={{fontSize:12}}>{b.ket.length>28?b.ket.slice(0,28)+"...":b.ket}</span>,
+              <span style={{fontWeight:700,color:b.tipe==="masuk"?"#16a34a":"#dc2626"}}>{fmt(b.jumlah)}</span>,
+              <Badge s={b.tipe}/>
+            ])}
+          />
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader title="Job Order Aktif" icon="prod"/>
+        <DataTable
+          heads={["JO ID","Invoice","Produk","Qty","Status"]}
+          rows={jobOrders.filter(j=>j.status!=="Selesai").map(j => [
+            <span style={{fontWeight:700,color:"#6366f1"}}>{j.id}</span>,
+            j.invId,
+            produk.find(p=>p.id===j.prodId)?.nama||"-",
+            j.qty,
+            <Badge s={j.status}/>
+          ])}
+          empty="Tidak ada job order aktif"
+        />
+      </Card>
+    </div>
+  );
+}
+
+// ─── MODULE: BANK ─────────────────────────────────────────────
+function BankModule({ bank, setBank, showToast }) {
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ tgl:today(), ket:"", tipe:"masuk", jumlah:"", ref:"" });
+  const fileRef = useRef();
+
+  const saldo      = bank.length > 0 ? bank[bank.length-1].saldo : 0;
+  const totMasuk   = bank.filter(b=>b.tipe==="masuk").reduce((s,b)=>s+b.jumlah,0);
+  const totKeluar  = bank.filter(b=>b.tipe==="keluar").reduce((s,b)=>s+b.jumlah,0);
+
+  const set = (k,v) => setForm(p => ({...p,[k]:v}));
+
+  const addManual = () => {
+    if (!form.ket || !form.jumlah) { showToast("Lengkapi semua field!","error"); return; }
+    const jumlah = parseFloat(form.jumlah);
+    const prev   = bank.length > 0 ? bank[bank.length-1].saldo : 0;
+    const saldo2 = form.tipe==="masuk" ? prev+jumlah : prev-jumlah;
+    const entry  = { id:uid("TXN"), tgl:form.tgl, ket:form.ket, tipe:form.tipe, jumlah, ref:form.ref, saldo:saldo2 };
+    setBank(p => [...p, entry]);
+    setForm({ tgl:today(), ket:"", tipe:"masuk", jumlah:"", ref:"" });
+    showToast("Mutasi "+entry.id+" berhasil ditambahkan","success");
+    setShowForm(false);
+  };
+
+  const handleCSV = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const lines = ev.target.result.split("\n").filter(l=>l.trim());
+      const entries = [];
+      let prev = bank.length > 0 ? bank[bank.length-1].saldo : 0;
+      for (let i=1; i<lines.length; i++) {
+        const [tgl,ket,tipe,jStr,ref=""] = lines[i].split(",").map(c=>c.trim().replace(/"/g,""));
+        const jumlah = parseFloat(jStr.replace(/\./g,"").replace(",",".")) || 0;
+        prev = tipe==="masuk" ? prev+jumlah : prev-jumlah;
+        entries.push({ id:uid("TXN"), tgl, ket, tipe, jumlah, ref, saldo:prev });
+      }
+      setBank(p => [...p,...entries]);
+      showToast(entries.length+" mutasi berhasil diimport","success");
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  };
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+        <div>
+          <div style={{fontWeight:800,fontSize:18,color:"#1e293b"}}>Buku Bank</div>
+          <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>ID transaksi sebagai referensi pembayaran piutang/hutang</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <input type="file" accept=".csv" ref={fileRef} onChange={handleCSV} style={{display:"none"}}/>
+          <Btn variant="ghost" onClick={() => fileRef.current.click()}><Ic n="upload" s={13}/> Import CSV</Btn>
+          <Btn onClick={() => setShowForm(!showForm)}><Ic n="plus" s={13}/> Tambah Manual</Btn>
+        </div>
+      </div>
+
+      <Stats items={[
+        { label:"Saldo Akhir",  value:fmt(saldo),     bg:"#eff6ff", color:"#6366f1" },
+        { label:"Total Masuk",  value:fmt(totMasuk),  bg:"#dcfce7", color:"#16a34a" },
+        { label:"Total Keluar", value:fmt(totKeluar), bg:"#fee2e2", color:"#dc2626" },
+        { label:"Total Mutasi", value:bank.length+" txn", bg:"#f5f3ff", color:"#7c3aed" },
+      ]}/>
+
+      {showForm && (
+        <Card style={{padding:18,marginBottom:14}}>
+          <div style={{fontWeight:700,fontSize:13,color:"#1e293b",marginBottom:14}}>Tambah Mutasi Manual</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <Inp label="Tanggal" type="date" value={form.tgl} onChange={e=>set("tgl",e.target.value)}/>
+            <Sel label="Tipe" value={form.tipe} onChange={e=>set("tipe",e.target.value)}>
+              <option value="masuk">Masuk</option>
+              <option value="keluar">Keluar</option>
+            </Sel>
+            <div style={{gridColumn:"1/-1"}}>
+              <Inp label="Keterangan" placeholder="Terima pembayaran INV-001 / Bayar supplier..." value={form.ket} onChange={e=>set("ket",e.target.value)}/>
+            </div>
+            <Inp label="Jumlah (Rp)" type="number" placeholder="0" value={form.jumlah} onChange={e=>set("jumlah",e.target.value)}/>
+            <Inp label="Referensi (opsional)" placeholder="INV-001 / PO-001" value={form.ref} onChange={e=>set("ref",e.target.value)}/>
+          </div>
+          <div style={{background:"#eff6ff",borderRadius:9,padding:"9px 13px",marginBottom:14,fontSize:12,color:"#4338ca"}}>
+            ID transaksi (TXN-xxxxxx) dibuat otomatis dan bisa dipakai referensi bayar piutang/hutang.
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            <Btn onClick={addManual}><Ic n="save" s={13}/> Simpan</Btn>
+            <Btn variant="ghost" onClick={() => setShowForm(false)}>Batal</Btn>
+          </div>
+        </Card>
+      )}
+
+      <div style={{background:"#f8fafc",borderRadius:10,padding:"9px 14px",marginBottom:14,fontSize:12,color:"#64748b",display:"flex",alignItems:"center",gap:7}}>
+        <Ic n="upload" s={12}/>
+        Format CSV: <code style={{background:"#e2e8f0",padding:"1px 6px",borderRadius:4,fontSize:11}}>tanggal,keterangan,tipe,jumlah,referensi</code>
+        — tipe: masuk / keluar
+      </div>
+
+      <Card>
+        <CardHeader title={"Daftar Mutasi ("+bank.length+")"} icon="bank"/>
+        <DataTable
+          heads={["ID Transaksi","Tanggal","Keterangan","Tipe","Jumlah","Referensi","Saldo"]}
+          rows={[...bank].reverse().map(b => [
+            <span style={{fontWeight:800,color:"#6366f1",fontSize:11,background:"#eff6ff",padding:"2px 8px",borderRadius:6}}>{b.id}</span>,
+            b.tgl,
+            <span style={{fontSize:12}}>{b.ket}</span>,
+            <Badge s={b.tipe}/>,
+            <span style={{fontWeight:700,color:b.tipe==="masuk"?"#16a34a":"#dc2626"}}>{fmt(b.jumlah)}</span>,
+            b.ref ? <span style={{fontSize:11,color:"#6366f1",fontWeight:600}}>{b.ref}</span> : <span style={{color:"#cbd5e1"}}>-</span>,
+            <span style={{fontWeight:700}}>{fmt(b.saldo)}</span>,
+          ])}
+        />
+      </Card>
+    </div>
+  );
+}
+
+// ─── MODULE: PIUTANG ──────────────────────────────────────────
+function PiutangModule({ piutang, setPiutang, jobOrders, setJobOrders, produk, customers, bank, showToast }) {
+  const [view, setView]         = useState("list");
+  const [bayarItem, setBayarItem] = useState(null);
+  const [form, setForm]         = useState({ customerId:"", tgl:today(), due:addDays(30), items:[emptyRow()] });
+
+  const outstanding = piutang.reduce((s,p)=>s+(p.total-p.dibayar),0);
+  const setF = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const addItem   = () => setForm(p=>({...p,items:[...p.items,emptyRow()]}));
+  const updItem   = (id,k,v) => setForm(p=>({...p,items:p.items.map(it=>it.id===id?{...it,[k]:v}:it)}));
+  const delItem   = id => setForm(p=>({...p,items:p.items.filter(it=>it.id!==id)}));
+  const calcTotal = () => form.items.reduce((s,it)=>{ const g=(it.qty||0)*(it.harga||0); return s+g-g*(it.diskon||0)/100; },0);
+
+  const saveInv = () => {
+    if (!form.customerId) { showToast("Pilih pelanggan!","error"); return; }
+    const valid = form.items.filter(it=>it.prodId&&it.qty>0&&it.harga>0);
+    if (valid.length===0) { showToast("Tambah minimal 1 barang!","error"); return; }
+    const invId = uid("INV");
+    const joId  = uid("JO");
+    const inv   = { id:invId, tgl:form.tgl, due:form.due, customerId:parseInt(form.customerId), total:calcTotal(), dibayar:0, status:"Belum", items:valid, joId };
+    const jo    = { id:joId, invId, prodId:parseInt(valid[0].prodId), qty:parseInt(valid[0].qty), status:"Draft", tgl:form.tgl, logs:[] };
+    setPiutang(p=>[inv,...p]);
+    setJobOrders(p=>[jo,...p]);
+    showToast("Invoice "+invId+" & Job Order "+joId+" dibuat!","success");
+    setForm({ customerId:"", tgl:today(), due:addDays(30), items:[emptyRow()] });
+    setView("list");
+  };
+
+  const doBayar = (txnId, jumlah) => {
+    const newDibayar = bayarItem.dibayar + jumlah;
+    const status     = newDibayar >= bayarItem.total ? "Lunas" : "Sebagian";
+    setPiutang(p=>p.map(x=>x.id===bayarItem.id?{...x,dibayar:newDibayar,status}:x));
+    showToast("Bayar "+fmt(jumlah)+" dicatat (ref: "+txnId+")","success");
+  };
+
+  if (view==="form") return (
+    <div style={{maxWidth:620,margin:"0 auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <div>
+          <div style={{fontWeight:800,fontSize:18,color:"#1e293b"}}>Invoice Baru</div>
+          <div style={{fontSize:12,color:"#94a3b8"}}>Otomatis buat Job Order setelah simpan</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <Btn variant="ghost" onClick={()=>setView("list")}>Batal</Btn>
+          <Btn onClick={saveInv}><Ic n="save" s={13}/> Simpan + Buat JO</Btn>
+        </div>
+      </div>
+      <Card style={{padding:18,marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:13,color:"#1e293b",marginBottom:13}}>Informasi Invoice</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Sel label="Pelanggan" value={form.customerId} onChange={e=>setF("customerId",e.target.value)}>
+            <option value="">-- Pilih --</option>
+            {customers.map(c=><option key={c.id} value={c.id}>{c.nama}</option>)}
+          </Sel>
+          <Inp label="Tanggal" type="date" value={form.tgl} onChange={e=>setF("tgl",e.target.value)}/>
+          <Inp label="Jatuh Tempo" type="date" value={form.due} onChange={e=>setF("due",e.target.value)}/>
+        </div>
+      </Card>
+      <Card style={{padding:18,marginBottom:12}}>
+        <div style={{fontWeight:700,fontSize:13,color:"#1e293b",marginBottom:13}}>Detail Produk</div>
+        {form.items.map((it,i)=>(
+          <div key={it.id} style={{background:"#f8fafc",borderRadius:10,padding:13,marginBottom:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:9}}>
+              <span style={{fontSize:11,fontWeight:700,color:"#94a3b8"}}>ITEM {i+1}</span>
+              {form.items.length>1 && (
+                <button onClick={()=>delItem(it.id)} style={{border:"none",background:"transparent",cursor:"pointer",color:"#94a3b8",padding:2}}><Ic n="trash" s={13}/></button>
+              )}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:8}}>
+              <select value={it.prodId} onChange={e=>{
+                const p=produk.find(p=>p.id===parseInt(e.target.value));
+                updItem(it.id,"prodId",e.target.value);
+                if(p) updItem(it.id,"harga",p.hargaJual);
+              }} style={inputStyle}>
+                <option value="">-- Pilih Produk --</option>
+                {produk.map(p=><option key={p.id} value={p.id}>{p.nama}</option>)}
+              </select>
+              <input type="number" placeholder="Qty" value={it.qty} onChange={e=>updItem(it.id,"qty",e.target.value)} style={inputStyle}/>
+              <input type="number" placeholder="Harga" value={it.harga} onChange={e=>updItem(it.id,"harga",e.target.value)} style={inputStyle}/>
+              <input type="number" placeholder="Disc%" value={it.diskon} onChange={e=>updItem(it.id,"diskon",e.target.value)} style={inputStyle}/>
+            </div>
+            {it.prodId && (
+              <div style={{marginTop:7,fontSize:11,color:"#94a3b8"}}>
+                BOM: {produk.find(p=>p.id===parseInt(it.prodId))?.bom?.length||0} komponen bahan baku
+              </div>
+            )}
+          </div>
+        ))}
+        <button onClick={addItem} style={{width:"100%",padding:9,borderRadius:9,border:"2px dashed #e2e8f0",background:"transparent",color:"#6366f1",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,fontFamily:"inherit"}}>
+          <Ic n="plus" s={12}/> Tambah Item
+        </button>
+        <div style={{marginTop:12,background:"#6366f1",borderRadius:10,padding:"9px 13px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{color:"rgba(255,255,255,0.75)",fontSize:12}}>TOTAL</span>
+          <span style={{color:"#fff",fontWeight:800,fontSize:15}}>{fmt(calcTotal())}</span>
+        </div>
+      </Card>
+    </div>
+  );
+
+  return (
+    <div>
+      <BayarModal open={!!bayarItem} onClose={()=>setBayarItem(null)} item={bayarItem} tipeBank="masuk" bank={bank} onSave={doBayar} label="Piutang"/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <div style={{fontWeight:800,fontSize:18,color:"#1e293b"}}>Piutang Dagang</div>
+        <Btn onClick={()=>setView("form")}><Ic n="plus" s={13}/> Invoice Baru</Btn>
+      </div>
+      <Stats items={[
+        { label:"Outstanding",   value:fmt(outstanding), bg:"#fef9c3", color:"#ca8a04" },
+        { label:"Invoice Lunas", value:piutang.filter(p=>p.status==="Lunas").length+" inv", bg:"#dcfce7", color:"#16a34a" },
+        { label:"Total Invoice", value:piutang.length+" inv", bg:"#eff6ff", color:"#6366f1" },
+      ]}/>
+      <Card>
+        <CardHeader title="Daftar Invoice" icon="ar"/>
+        <DataTable
+          heads={["Invoice","Pelanggan","Tgl","Due","Total","Terbayar","Status","JO","Aksi"]}
+          rows={piutang.map(p=>[
+            <span style={{fontWeight:700,color:"#6366f1"}}>{p.id}</span>,
+            customers.find(c=>c.id===p.customerId)?.nama||"-",
+            p.tgl, p.due,
+            <span style={{fontWeight:700}}>{fmt(p.total)}</span>,
+            <span style={{fontWeight:700,color:"#16a34a"}}>{fmt(p.dibayar)}</span>,
+            <Badge s={p.status}/>,
+            <span style={{fontSize:11,color:"#6366f1",fontWeight:600}}>{p.joId}</span>,
+            p.status!=="Lunas" && <Btn variant="success" onClick={()=>setBayarItem(p)} style={{padding:"3px 9px",fontSize:11}}>Bayar</Btn>
+          ])}
+        />
+      </Card>
+    </div>
+  );
+}
+
+// ─── MODULE: HUTANG ───────────────────────────────────────────
+function HutangModule({ hutang, setHutang, suppliers, bahanBaku, bank, showToast }) {
+  const [view, setView]          = useState("list");
+  const [bayarItem, setBayarItem] = useState(null);
+  const [form, setForm]          = useState({ supplierId:"", tgl:today(), due:addDays(30), items:[emptyBB()] });
+
+  const outstanding = hutang.reduce((s,h)=>s+(h.total-h.dibayar),0);
+  const setF = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const addItem  = () => setForm(p=>({...p,items:[...p.items,emptyBB()]}));
+  const updItem  = (id,k,v) => setForm(p=>({...p,items:p.items.map(it=>it.id===id?{...it,[k]:v}:it)}));
+  const calcTotal= () => form.items.reduce((s,it)=>s+(it.qty||0)*(it.harga||0),0);
+
+  const savePO = () => {
+    if (!form.supplierId) { showToast("Pilih supplier!","error"); return; }
+    const po = { id:uid("PO"), tgl:form.tgl, due:form.due, supplierId:parseInt(form.supplierId), total:calcTotal(), dibayar:0, status:"Belum", items:form.items };
+    setHutang(p=>[po,...p]);
+    showToast("PO "+po.id+" berhasil dibuat!","success");
+    setForm({ supplierId:"", tgl:today(), due:addDays(30), items:[emptyBB()] });
+    setView("list");
+  };
+
+  const doBayar = (txnId, jumlah) => {
+    const newDibayar = bayarItem.dibayar + jumlah;
+    const status     = newDibayar >= bayarItem.total ? "Lunas" : "Sebagian";
+    setHutang(p=>p.map(x=>x.id===bayarItem.id?{...x,dibayar:newDibayar,status}:x));
+    showToast("Bayar hutang "+fmt(jumlah)+" dicatat (ref: "+txnId+")","success");
+  };
+
+  if (view==="form") return (
+    <div style={{maxWidth:580,margin:"0 auto"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <div style={{fontWeight:800,fontSize:18,color:"#1e293b"}}>Purchase Order Baru</div>
+        <div style={{display:"flex",gap:8}}>
+          <Btn variant="ghost" onClick={()=>setView("list")}>Batal</Btn>
+          <Btn onClick={savePO}><Ic n="save" s={13}/> Simpan PO</Btn>
+        </div>
+      </div>
+      <Card style={{padding:18,marginBottom:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Sel label="Supplier" value={form.supplierId} onChange={e=>setF("supplierId",e.target.value)}>
+            <option value="">-- Pilih --</option>
+            {suppliers.map(s=><option key={s.id} value={s.id}>{s.nama}</option>)}
+          </Sel>
+          <Inp label="Tanggal" type="date" value={form.tgl} onChange={e=>setF("tgl",e.target.value)}/>
+          <Inp label="Jatuh Tempo" type="date" value={form.due} onChange={e=>setF("due",e.target.value)}/>
+        </div>
+      </Card>
+      <Card style={{padding:18}}>
+        <div style={{fontWeight:700,fontSize:13,color:"#1e293b",marginBottom:13}}>Bahan Baku yang Dibeli</div>
+        {form.items.map((it,i)=>(
+          <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr auto",gap:8,marginBottom:8,alignItems:"end"}}>
+            <select value={it.bbId} onChange={e=>{
+              const bb=bahanBaku.find(b=>b.id===parseInt(e.target.value));
+              updItem(it.id,"bbId",e.target.value);
+              if(bb) updItem(it.id,"harga",bb.hargaBeli);
+            }} style={inputStyle}>
+              <option value="">-- Bahan Baku --</option>
+              {bahanBaku.map(b=><option key={b.id} value={b.id}>{b.nama}</option>)}
+            </select>
+            <input type="number" placeholder="Qty" value={it.qty} onChange={e=>updItem(it.id,"qty",e.target.value)} style={inputStyle}/>
+            <input type="number" placeholder="Harga" value={it.harga} onChange={e=>updItem(it.id,"harga",e.target.value)} style={inputStyle}/>
+            <button onClick={()=>setForm(p=>({...p,items:p.items.filter(x=>x.id!==it.id)}))}
+              style={{padding:8,border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:8,cursor:"pointer",display:"flex",alignItems:"center"}}>
+              <Ic n="trash" s={13}/>
+            </button>
+          </div>
+        ))}
+        <button onClick={addItem} style={{width:"100%",padding:9,borderRadius:9,border:"2px dashed #e2e8f0",background:"transparent",color:"#6366f1",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,fontFamily:"inherit"}}>
+          <Ic n="plus" s={12}/> Tambah Bahan Baku
+        </button>
+        <div style={{marginTop:12,background:"#6366f1",borderRadius:10,padding:"9px 13px",display:"flex",justifyContent:"space-between"}}>
+          <span style={{color:"rgba(255,255,255,0.75)",fontSize:12}}>TOTAL PO</span>
+          <span style={{color:"#fff",fontWeight:800,fontSize:15}}>{fmt(calcTotal())}</span>
+        </div>
+      </Card>
+    </div>
+  );
+
+  return (
+    <div>
+      <BayarModal open={!!bayarItem} onClose={()=>setBayarItem(null)} item={bayarItem} tipeBank="keluar" bank={bank} onSave={doBayar} label="Hutang"/>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+        <div style={{fontWeight:800,fontSize:18,color:"#1e293b"}}>Hutang Dagang</div>
+        <Btn onClick={()=>setView("form")}><Ic n="plus" s={13}/> PO Baru</Btn>
+      </div>
+      <Stats items={[
+        { label:"Outstanding",  value:fmt(outstanding), bg:"#fee2e2", color:"#dc2626" },
+        { label:"PO Lunas",    value:hutang.filter(h=>h.status==="Lunas").length+" PO", bg:"#dcfce7", color:"#16a34a" },
+        { label:"Total PO",    value:hutang.length+" PO", bg:"#eff6ff", color:"#6366f1" },
+      ]}/>
+      <Card>
+        <CardHeader title="Daftar Purchase Order" icon="ap"/>
+        <DataTable
+          heads={["PO ID","Supplier","Tanggal","Due","Total","Terbayar","Status","Aksi"]}
+          rows={hutang.map(h=>[
+            <span style={{fontWeight:700,color:"#6366f1"}}>{h.id}</span>,
+            suppliers.find(s=>s.id===h.supplierId)?.nama||"-",
+            h.tgl, h.due,
+            <span style={{fontWeight:700}}>{fmt(h.total)}</span>,
+            <span style={{fontWeight:700,color:"#16a34a"}}>{fmt(h.dibayar)}</span>,
+            <Badge s={h.status}/>,
+            h.status!=="Lunas" && <Btn variant="danger" onClick={()=>setBayarItem(h)} style={{padding:"3px 9px",fontSize:11}}>Bayar</Btn>
+          ])}
+        />
+      </Card>
+    </div>
+  );
+}
+
+// ─── MODULE: PRODUKSI ─────────────────────────────────────────
+function ProduksiModule({ jobOrders, setJobOrders, produk, bahanBaku, setBahanBaku, setProduk, showToast }) {
+  const [logModal, setLogModal] = useState(null);
+  const [logForm, setLogForm]   = useState({ ket:"", qty:"" });
+
+  const addLog = () => {
+    if (!logForm.ket) { showToast("Isi keterangan!","error"); return; }
+    const log = { tgl:today(), ket:logForm.ket, qty:parseInt(logForm.qty)||0 };
+    setJobOrders(p=>p.map(j=>j.id===logModal.id?{...j,logs:[...j.logs,log]}:j));
+    showToast("Log produksi ditambahkan","success");
+    setLogModal(null);
+  };
+
+  const startJO = jo => {
+    const prod = produk.find(p=>p.id===jo.prodId);
+    if (!prod) return;
+    prod.bom.forEach(b => {
+      setBahanBaku(p=>p.map(bb=>bb.id===b.bbId?{...bb,stok:Math.max(0,bb.stok-(b.qty*jo.qty))}:bb));
+    });
+    setJobOrders(p=>p.map(j=>j.id===jo.id?{...j,status:"In Progress"}:j));
+    showToast("JO "+jo.id+" dimulai — stok bahan baku dikurangi","success");
+  };
+
+  const selesaiJO = jo => {
+    setProduk(p=>p.map(pr=>pr.id===jo.prodId?{...pr,stok:(pr.stok||0)+jo.qty}:pr));
+    setJobOrders(p=>p.map(j=>j.id===jo.id?{...j,status:"Selesai"}:j));
+    showToast("JO "+jo.id+" selesai — "+jo.qty+" unit masuk persediaan","success");
+  };
+
+  return (
+    <div>
+      <Modal open={!!logModal} onClose={()=>setLogModal(null)} title={"Log Produksi — "+(logModal?.id||"")} width={420}>
+        <div style={{marginBottom:12}}>
+          <Inp label="Keterangan" placeholder="Batch 1 selesai assembly..." value={logForm.ket} onChange={e=>setLogForm(p=>({...p,ket:e.target.value}))}/>
+        </div>
+        <div style={{marginBottom:16}}>
+          <Inp label="Qty Selesai (opsional)" type="number" value={logForm.qty} onChange={e=>setLogForm(p=>({...p,qty:e.target.value}))}/>
+        </div>
+        <Btn onClick={addLog}><Ic n="log" s={13}/> Tambah Log</Btn>
+      </Modal>
+
+      <div style={{marginBottom:18}}>
+        <div style={{fontWeight:800,fontSize:18,color:"#1e293b"}}>Produksi & Job Order</div>
+        <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>Kelola JO berdasarkan BOM — log progress — selesai masuk persediaan</div>
+      </div>
+
+      <Stats items={[
+        { label:"Draft",       value:jobOrders.filter(j=>j.status==="Draft").length+" JO",       bg:"#f1f5f9", color:"#64748b" },
+        { label:"In Progress", value:jobOrders.filter(j=>j.status==="In Progress").length+" JO", bg:"#dbeafe", color:"#2563eb" },
+        { label:"Selesai",     value:jobOrders.filter(j=>j.status==="Selesai").length+" JO",     bg:"#dcfce7", color:"#16a34a" },
+      ]}/>
+
+      <div style={{display:"flex",flexDirection:"column",gap:12}}>
+        {jobOrders.map(jo => {
+          const prod = produk.find(p=>p.id===jo.prodId);
+          return (
+            <Card key={jo.id}>
+              <div style={{padding:18}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:12}}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                      <span style={{fontWeight:800,fontSize:15,color:"#6366f1"}}>{jo.id}</span>
+                      <Badge s={jo.status}/>
+                    </div>
+                    <div style={{fontWeight:600,fontSize:14,color:"#1e293b"}}>{prod?.nama||"-"}</div>
+                    <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>
+                      Invoice: <span style={{color:"#6366f1",fontWeight:600}}>{jo.invId}</span>
+                      {" · "} Qty: <strong>{jo.qty} {prod?.satuan}</strong>
+                      {" · "} Tgl: {jo.tgl}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    {jo.status==="Draft" && (
+                      <Btn variant="ghost" onClick={()=>startJO(jo)} style={{fontSize:11}}><Ic n="arrow" s={12}/> Mulai</Btn>
+                    )}
+                    {jo.status==="In Progress" && (
+                      <>
+                        <Btn variant="ghost" onClick={()=>{ setLogModal(jo); setLogForm({ket:"",qty:""}); }} style={{fontSize:11}}><Ic n="log" s={12}/> Log</Btn>
+                        <Btn variant="success" onClick={()=>selesaiJO(jo)} style={{fontSize:11}}><Ic n="check" s={12}/> Selesai</Btn>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {prod?.bom && (
+                  <div style={{background:"#f8fafc",borderRadius:9,padding:11,marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:7}}>Bill of Materials (x{jo.qty})</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {prod.bom.map(b => {
+                        const bb = bahanBaku.find(x=>x.id===b.bbId);
+                        const needed = b.qty * jo.qty;
+                        const ok = (bb?.stok||0) >= needed;
+                        return (
+                          <span key={b.bbId} style={{background:ok?"#dcfce7":"#fee2e2",color:ok?"#16a34a":"#dc2626",fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:7}}>
+                            {bb?.nama||"?"} x{needed} {bb?.satuan}
+                            {!ok && " (!!)"}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {jo.logs.length > 0 && (
+                  <div style={{borderLeft:"2px solid #e2e8f0",paddingLeft:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:0.5,marginBottom:7}}>Log Produksi</div>
+                    {jo.logs.map((l,i) => (
+                      <div key={i} style={{marginBottom:7}}>
+                        <div style={{fontSize:11,color:"#94a3b8"}}>{l.tgl}</div>
+                        <div style={{fontSize:13,fontWeight:600,color:"#1e293b"}}>{l.ket}</div>
+                        {l.qty>0 && <div style={{fontSize:11,color:"#16a34a",fontWeight:600}}>{l.qty} unit selesai</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── MODULE: PERSEDIAAN ───────────────────────────────────────
+function PersediaanModule({ bahanBaku, produk }) {
+  return (
+    <div>
+      <div style={{marginBottom:18}}>
+        <div style={{fontWeight:800,fontSize:18,color:"#1e293b"}}>Persediaan</div>
+        <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>Update otomatis dari job order produksi</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <Card>
+          <CardHeader title="Bahan Baku" icon="inv"/>
+          <DataTable
+            heads={["Kode","Nama","Stok","Satuan","Nilai"]}
+            rows={bahanBaku.map(b=>[
+              <span style={{fontSize:11,color:"#6366f1",fontWeight:700}}>{b.kode}</span>,
+              b.nama,
+              <span style={{fontWeight:700,color:b.stok<20?"#dc2626":"#1e293b"}}>{b.stok}</span>,
+              b.satuan,
+              fmt(b.stok*b.hargaBeli)
+            ])}
+          />
+        </Card>
+        <Card>
+          <CardHeader title="Barang Jadi" icon="inv"/>
+          <DataTable
+            heads={["Kode","Nama","Stok","Satuan","Nilai"]}
+            rows={produk.map(p=>[
+              <span style={{fontSize:11,color:"#6366f1",fontWeight:700}}>{p.kode}</span>,
+              p.nama,
+              <span style={{fontWeight:700,color:(p.stok||0)<5?"#dc2626":"#1e293b"}}>{p.stok||0}</span>,
+              p.satuan,
+              fmt((p.stok||0)*p.hargaJual)
+            ])}
+          />
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─── MODULE: MASTER ───────────────────────────────────────────
+function MasterModule({ produk, setProduk, bahanBaku, customers, suppliers, showToast }) {
+  const [tab, setTab]        = useState("produk");
+  const [bomModal, setBomModal] = useState(null);
+  const [newBom, setNewBom]  = useState({ bbId:"", qty:1 });
+
+  const addBom = () => {
+    if (!newBom.bbId) return;
+    const updated = { ...bomModal, bom:[...(bomModal.bom||[]),{bbId:parseInt(newBom.bbId),qty:parseFloat(newBom.qty)||1}] };
+    setProduk(p=>p.map(pr=>pr.id===bomModal.id?updated:pr));
+    setBomModal(updated);
+    setNewBom({ bbId:"", qty:1 });
+    showToast("Komponen BOM ditambahkan","success");
+  };
+
+  const removeBom = bbId => {
+    const updated = { ...bomModal, bom:bomModal.bom.filter(b=>b.bbId!==bbId) };
+    setProduk(p=>p.map(pr=>pr.id===bomModal.id?updated:pr));
+    setBomModal(updated);
+  };
+
+  const tabs = ["produk","bahan","customer","supplier"];
+  const tabLabels = { produk:"Produk & BOM", bahan:"Bahan Baku", customer:"Customer", supplier:"Supplier" };
+
+  return (
+    <div>
+      <Modal open={!!bomModal} onClose={()=>setBomModal(null)} title={"Edit BOM — "+(bomModal?.nama||"")} width={500}>
+        <div style={{marginBottom:14}}>
+          {(bomModal?.bom||[]).map(b => {
+            const bb = bahanBaku.find(x=>x.id===b.bbId);
+            return (
+              <div key={b.bbId} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"#f8fafc",borderRadius:8,marginBottom:6}}>
+                <span style={{fontWeight:600,fontSize:13}}>{bb?.nama}</span>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span style={{fontSize:12,color:"#6366f1",fontWeight:700}}>x{b.qty} {bb?.satuan}</span>
+                  <button onClick={()=>removeBom(b.bbId)} style={{border:"none",background:"#fee2e2",color:"#dc2626",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontSize:11}}>Hapus</button>
+                </div>
+              </div>
+            );
+          })}
+          {(bomModal?.bom||[]).length===0 && <div style={{textAlign:"center",color:"#94a3b8",padding:20,fontSize:13}}>Belum ada komponen</div>}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1fr auto",gap:8,alignItems:"end"}}>
+          <select value={newBom.bbId} onChange={e=>setNewBom(p=>({...p,bbId:e.target.value}))} style={inputStyle}>
+            <option value="">-- Bahan Baku --</option>
+            {bahanBaku.filter(b=>!(bomModal?.bom||[]).find(x=>x.bbId===b.id)).map(b=><option key={b.id} value={b.id}>{b.nama}</option>)}
+          </select>
+          <input type="number" placeholder="Qty" value={newBom.qty} onChange={e=>setNewBom(p=>({...p,qty:e.target.value}))} style={inputStyle}/>
+          <Btn onClick={addBom}><Ic n="plus" s={13}/></Btn>
+        </div>
+      </Modal>
+
+      <div style={{marginBottom:18}}>
+        <div style={{fontWeight:800,fontSize:18,color:"#1e293b"}}>Master Data</div>
+      </div>
+
+      <div style={{display:"flex",gap:3,background:"#f1f5f9",borderRadius:11,padding:3,marginBottom:18,width:"fit-content"}}>
+        {tabs.map(t=>(
+          <button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:"inherit",background:tab===t?"#fff":"transparent",color:tab===t?"#6366f1":"#64748b",boxShadow:tab===t?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>
+            {tabLabels[t]}
           </button>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs text-gray-400 flex-wrap">
-              <span className="text-gray-500">{currentGroup?.label}</span><span>›</span>
-              <span className="text-gray-700 font-medium">{currentTabMeta?.label||tab}</span>
+        ))}
+      </div>
+
+      {tab==="produk" && (
+        <Card>
+          <CardHeader title="Produk & BOM" icon="inv"/>
+          <DataTable
+            heads={["Kode","Nama","Satuan","Harga Jual","Stok","BOM","Aksi"]}
+            rows={produk.map(p=>[
+              <span style={{fontSize:11,color:"#6366f1",fontWeight:700}}>{p.kode}</span>,
+              p.nama, p.satuan, fmt(p.hargaJual), p.stok||0,
+              <span style={{fontSize:11,color:"#6366f1"}}>{p.bom?.length||0} komponen</span>,
+              <Btn variant="ghost" onClick={()=>setBomModal(p)} style={{padding:"3px 9px",fontSize:11}}>Edit BOM</Btn>
+            ])}
+          />
+        </Card>
+      )}
+
+      {tab==="bahan" && (
+        <Card>
+          <CardHeader title="Bahan Baku" icon="inv"/>
+          <DataTable
+            heads={["Kode","Nama","Satuan","Stok","Harga Beli"]}
+            rows={bahanBaku.map(b=>[
+              <span style={{fontSize:11,color:"#6366f1",fontWeight:700}}>{b.kode}</span>,
+              b.nama, b.satuan,
+              <span style={{fontWeight:700,color:b.stok<20?"#dc2626":"#1e293b"}}>{b.stok}</span>,
+              fmt(b.hargaBeli)
+            ])}
+          />
+        </Card>
+      )}
+
+      {tab==="customer" && (
+        <Card>
+          <CardHeader title="Customer" icon="master"/>
+          <DataTable
+            heads={["Kode","Nama","Telp","Termin"]}
+            rows={customers.map(c=>[
+              <span style={{fontSize:11,color:"#6366f1",fontWeight:700}}>{c.kode}</span>,
+              c.nama, c.telp, c.termin+" hari"
+            ])}
+          />
+        </Card>
+      )}
+
+      {tab==="supplier" && (
+        <Card>
+          <CardHeader title="Supplier" icon="master"/>
+          <DataTable
+            heads={["Kode","Nama","Telp","Termin"]}
+            rows={suppliers.map(s=>[
+              <span style={{fontSize:11,color:"#6366f1",fontWeight:700}}>{s.kode}</span>,
+              s.nama, s.telp, s.termin+" hari"
+            ])}
+          />
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────
+export default function App() {
+  const [nav, setNav] = useState("dashboard");
+  const [toast, setToast] = useState(null);
+
+  const [bank,     setBank]     = useState(initBank);
+  const [piutang,  setPiutang]  = useState(initPiutang);
+  const [hutang,   setHutang]   = useState(initHutang);
+  const [jobOrders,setJobOrders]= useState(initJO);
+  const [produk,   setProduk]   = useState(initProduk);
+  const [bahanBaku,setBahanBaku]= useState(initBB);
+  const [customers]             = useState(initCustomers);
+  const [suppliers]             = useState(initSuppliers);
+
+  const showToast = (msg, type="success") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const navItems = [
+    { id:"dashboard",  label:"Dashboard",   icon:"dash"   },
+    { id:"bank",       label:"Bank",         icon:"bank"   },
+    { id:"piutang",    label:"Piutang",      icon:"ar"     },
+    { id:"hutang",     label:"Hutang",       icon:"ap"     },
+    { id:"produksi",   label:"Produksi",     icon:"prod"   },
+    { id:"persediaan", label:"Persediaan",   icon:"inv"    },
+    { id:"master",     label:"Master Data",  icon:"master" },
+  ];
+
+  const allProps = { bank, setBank, piutang, setPiutang, hutang, setHutang, jobOrders, setJobOrders, produk, setProduk, bahanBaku, setBahanBaku, customers, suppliers, showToast };
+
+  const pages = {
+    dashboard:  <Dashboard  {...allProps}/>,
+    bank:       <BankModule {...allProps}/>,
+    piutang:    <PiutangModule {...allProps}/>,
+    hutang:     <HutangModule {...allProps}/>,
+    produksi:   <ProduksiModule {...allProps}/>,
+    persediaan: <PersediaanModule {...allProps}/>,
+    master:     <MasterModule {...allProps}/>,
+  };
+
+  return (
+    <div style={{display:"flex",height:"100vh",fontFamily:"'Plus Jakarta Sans',-apple-system,sans-serif",background:"#f8fafc",overflow:"hidden"}}>
+
+      {/* SIDEBAR */}
+      <div style={{width:210,background:"#fff",borderRight:"1px solid #f1f5f9",display:"flex",flexDirection:"column",padding:"0 0 14px",boxShadow:"1px 0 8px rgba(0,0,0,0.04)",flexShrink:0}}>
+        <div style={{padding:"16px 18px 13px",borderBottom:"1px solid #f1f5f9"}}>
+          <div style={{display:"flex",alignItems:"center",gap:9}}>
+            <div style={{width:34,height:34,background:"linear-gradient(135deg,#6366f1,#4f46e5)",borderRadius:9,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:900,fontSize:15}}>W</div>
+            <div>
+              <div style={{fontWeight:800,fontSize:13,color:"#1e293b"}}>Wijaya Finance</div>
+              <div style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>Mini ERP v2.0</div>
             </div>
           </div>
-          <button onClick={()=>{}} className="text-gray-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors" title="Refresh">
-            {ICONS.refresh}
-          </button>
-          <div className="text-xs text-gray-400 hidden sm:block">{today()}</div>
         </div>
 
-        <div className="flex-1 overflow-y-auto" style={{scrollbarWidth:"none",msOverflowStyle:"none"}}>
-          <div className="p-4 max-w-3xl w-full mx-auto">
-          {tab==="Dashboard"&&<Dashboard labaRugi={labaRugi} totalAset={totalAset} totalPiutang={totalPiutang} totalHutang={totalHutang} lowStock={lowStock} ar={ar} ap={ap}/>}
-          {tab==="Jurnal"&&<Jurnal journals={journals} setJournals={setJournals} accounts={accounts}/>}
-          {tab==="Buku Besar"&&<BukuBesar accounts={accounts} journals={journals} getBalance={getBalance}/>}
-          {tab==="Piutang"&&<Piutang ar={ar} setAr={setAr} setJournals={setJournals} inventory={inventory} customers={customers} akunKas={akunKas} onPrint={handlePrint}/>}
-          {tab==="Hutang"&&<Hutang ap={ap} setAp={setAp} setJournals={setJournals} suppliers={suppliers} akunKas={akunKas}/>}
-          {tab==="Inventory"&&<Inventory inventory={inventory} setInventory={setInventory} setJournals={setJournals}/>}
-          {tab==="Laporan"&&<Laporan accounts={accounts} getBalance={getBalance} labaRugi={labaRugi} inventory={inventory} journals={journals}/>}
-          {tab==="COA"&&<COA accounts={accounts} setAccounts={setAccounts}/>}
-          {tab==="Invoice"&&<InvoiceModule ar={ar} templates={templates} setTemplates={setTemplates} company={company} setCompany={setCompany} printTarget={printTarget}/>}
-          {tab==="Master"&&<MasterData customers={customers} setCustomers={setCustomers} suppliers={suppliers} setSuppliers={setSuppliers}/>}
-        </div>
+        <nav style={{flex:1,padding:"10px 8px",overflowY:"auto"}}>
+          {navItems.map(n => (
+            <button key={n.id} onClick={()=>setNav(n.id)}
+              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"8px 11px",borderRadius:10,border:"none",cursor:"pointer",textAlign:"left",marginBottom:2,background:nav===n.id?"#eff6ff":"transparent",color:nav===n.id?"#6366f1":"#64748b",fontFamily:"inherit",transition:"all 0.15s"}}>
+              <span style={{opacity:nav===n.id?1:0.65}}><Ic n={n.icon} s={16}/></span>
+              <span style={{fontSize:13,fontWeight:nav===n.id?700:500}}>{n.label}</span>
+              {nav===n.id && <span style={{marginLeft:"auto",width:5,height:5,borderRadius:3,background:"#6366f1"}}/>}
+            </button>
+          ))}
+        </nav>
+
+        <div style={{margin:"0 8px",padding:11,borderRadius:11,background:"#f8fafc",display:"flex",alignItems:"center",gap:9}}>
+          <div style={{width:30,height:30,borderRadius:8,background:"linear-gradient(135deg,#6366f1,#818cf8)",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:800,fontSize:12}}>A</div>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>Administrator</div>
+            <div style={{fontSize:10,color:"#94a3b8"}}>Full Access</div>
+          </div>
         </div>
       </div>
+
+      {/* MAIN */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{background:"#fff",borderBottom:"1px solid #f1f5f9",padding:"0 20px",height:52,display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:"0 1px 4px rgba(0,0,0,0.04)",flexShrink:0}}>
+          <div style={{fontSize:13,color:"#94a3b8",fontWeight:500}}>
+            {navItems.find(n=>n.id===nav)?.label}
+          </div>
+          <div style={{fontSize:11,color:"#94a3b8"}}>{today()}</div>
+        </div>
+        <div style={{flex:1,overflow:"auto",padding:18}}>
+          {pages[nav]}
+        </div>
+      </div>
+
+      <Toast toast={toast}/>
     </div>
   );
 }
